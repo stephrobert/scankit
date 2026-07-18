@@ -58,8 +58,9 @@ func OSCAL(w io.Writer, a assessment.Assessment) error {
 		// A finding records every objective that is not plainly satisfied.
 		if r.Status != assessment.Pass {
 			findings = append(findings, oscalFinding{
-				UUID:  uuidFrom("finding", r.Control, r.Subject, string(r.Status)),
-				Title: findingTitle(r),
+				UUID:        uuidFrom("finding", r.Control, r.Subject, string(r.Status)),
+				Title:       findingTitle(r),
+				Description: observationDesc(r), // required by OSCAL: a human-readable finding description
 				Target: oscalTarget{
 					Type:     "objective-id",
 					TargetID: r.Control,
@@ -84,6 +85,7 @@ func OSCAL(w io.Writer, a assessment.Assessment) error {
 		Results: []oscalResult{{
 			UUID:             uuidFrom("result", a.Run.Target.ID, ts),
 			Title:            "scankit assessment",
+			Description:      resultDescription(a.Run, len(reviewed), len(findings)),
 			Start:            ts,
 			ReviewedControls: oscalReviewed{ControlSelections: []oscalControlSel{{IncludeControls: reviewed}}},
 			Observations:     observations,
@@ -125,6 +127,12 @@ func findingTitle(r assessment.Result) string {
 		return r.Title
 	}
 	return r.Control
+}
+
+// resultDescription is the human-readable summary OSCAL requires on a result: what was
+// assessed and the headline counts, so the dossier is self-describing.
+func resultDescription(run assessment.Run, reviewed, findings int) string {
+	return fmt.Sprintf("%s: %d controls reviewed, %d findings.", assessmentTitle(run), reviewed, findings)
 }
 
 // objectiveState maps a status to an OSCAL objective-status state. OSCAL defines only
@@ -257,6 +265,7 @@ type oscalImportAP struct {
 type oscalResult struct {
 	UUID             string             `json:"uuid"`
 	Title            string             `json:"title"`
+	Description      string             `json:"description"`
 	Start            string             `json:"start,omitempty"`
 	ReviewedControls oscalReviewed      `json:"reviewed-controls"`
 	Observations     []oscalObservation `json:"observations,omitempty"`
@@ -287,6 +296,7 @@ type oscalObservation struct {
 type oscalFinding struct {
 	UUID                string        `json:"uuid"`
 	Title               string        `json:"title"`
+	Description         string        `json:"description"`
 	Target              oscalTarget   `json:"target"`
 	Props               []oscalProp   `json:"props,omitempty"`
 	RelatedObservations []oscalRelObs `json:"related-observations,omitempty"`

@@ -57,6 +57,16 @@ func TestOSCALValid(t *testing.T) {
 
 	results := ar["results"].([]any)
 	res0 := results[0].(map[string]any)
+	// OSCAL 1.1.2 requires a description on every result AND every finding — its absence
+	// is a schema-conformance break (assessment-results is invalid without it).
+	if d, _ := res0["description"].(string); d == "" {
+		t.Error("result is missing the required OSCAL description")
+	}
+	for i, f := range res0["findings"].([]any) {
+		if d, _ := f.(map[string]any)["description"].(string); d == "" {
+			t.Errorf("finding[%d] is missing the required OSCAL description", i)
+		}
+	}
 	// reviewed-controls excludes the not-evaluated control (2 reviewed of 3 results).
 	sel := res0["reviewed-controls"].(map[string]any)["control-selections"].([]any)[0].(map[string]any)
 	if inc := sel["include-controls"].([]any); len(inc) != 2 {

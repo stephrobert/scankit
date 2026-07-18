@@ -6,6 +6,16 @@ All notable changes to scankit are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.2.1] - 2026-07-18
+
+### Fixed
+- **`report.OSCAL` now emits schema-valid OSCAL 1.1.2 assessment-results.** The `result` and
+  every `finding` were missing the `description` property that the OSCAL 1.1.2 schema requires,
+  so the document failed validation against the official NIST schema (`oscal-cli
+  assessment-results validate`, or `check-jsonschema` against
+  `oscal_assessment-results_schema.json`). Both now carry a human-readable description; a
+  regression test asserts their presence. No API change — purely a conformance fix.
+
 ## [0.2.0] - 2026-07-18
 
 ### Added
