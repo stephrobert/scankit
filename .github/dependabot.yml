@@ -1,5 +1,7 @@
 # Dependabot keeps dependencies current — satisfies OpenSSF Scorecard's
 # Dependency-Update-Tool check and surfaces vulnerable transitive bumps early.
+# A cooldown quarantines freshly-published versions (the window in which a
+# supply-chain compromise is not yet detected) before a PR is opened.
 version: 2
 updates:
   - package-ecosystem: gomod
@@ -7,18 +9,31 @@ updates:
     schedule:
       interval: weekly
     open-pull-requests-limit: 5
+    labels:
+      - dependencies
+      - go
     commit-message:
       prefix: "build(deps)"
     groups:
       go-dependencies:
         patterns: ["*"]
+    cooldown:
+      default-days: 7
+      semver-major-days: 14
+      semver-minor-days: 7
+      semver-patch-days: 3
 
   - package-ecosystem: github-actions
     directory: "/"
     schedule:
       interval: weekly
+    labels:
+      - dependencies
+      - github-actions
     commit-message:
       prefix: "ci(actions)"
     groups:
       actions:
         patterns: ["*"]
+    cooldown:
+      default-days: 7
