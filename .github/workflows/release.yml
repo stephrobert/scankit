@@ -1,10 +1,10 @@
 name: Release
 
 # Tag-triggered release for the library. scankit ships no binary — the deliverable is the
-# tagged Go module. This job builds a source archive + SBOM, produces an SLSA build-provenance
-# attestation, signs the archive with Cosign (keyless), and publishes a GitHub release that
-# carries the provenance as a `*.intoto.jsonl` asset (Scorecard Signed-Releases) plus the
-# Cosign signature bundle. Consumers get a verifiable, SBOM-documented release to pin.
+# tagged Go module. GoReleaser is the recognized publishing workflow (Scorecard Packaging): it
+# builds a reproducible source archive + checksums + SBOM and signs the checksums with Cosign
+# (keyless). A native SLSA build-provenance attestation is then attached as a `*.intoto.jsonl`
+# release asset (Scorecard Signed-Releases). Consumers get a verifiable, SBOM-documented release.
 
 on:
   push:
@@ -17,8 +17,8 @@ jobs:
     name: Publish release
     runs-on: ubuntu-24.04
     permissions:
-      contents: write      # create the release + attach the provenance asset
-      id-token: write      # OIDC keyless (SLSA provenance + Cosign)
+      contents: write      # create the release + upload assets
+      id-token: write      # OIDC keyless (Cosign + SLSA provenance)
       attestations: write  # native GitHub attestation
     steps:
       - name: Harden runner
@@ -28,6 +28,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
+          fetch-depth: 0 # GoReleaser needs full history
           persist-credentials: false
 
       - name: Setup Go
@@ -41,51 +42,35 @@ jobs:
           go build ./...
           go test ./...
 
-      - name: Build source archive + checksums
-        run: |
-          git archive --format=tar.gz --prefix="scankit-${GITHUB_REF_NAME}/" -o "scankit-${GITHUB_REF_NAME}.tar.gz" HEAD
-          sha256sum "scankit-${GITHUB_REF_NAME}.tar.gz" > checksums.txt
+      - name: Install Syft (SBOM)
+        uses: anchore/sbom-action/download-syft@e22c389904149dbc22b58101806040fa8d37a610 # v0.24.0
 
-      - name: Generate SBOM
-        uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610 # v0.24.0
+      - name: Install Cosign
+        uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
+
+      - name: GoReleaser (source archive, checksums, SBOM, Cosign)
+        uses: goreleaser/goreleaser-action@f06c13b6b1a9625abc9e6e439d9c05a8f2190e94 # v7.2.3
         with:
-          format: spdx-json
-          output-file: scankit.spdx.json
-          upload-artifact: false
+          version: '~> v2'
+          args: release --clean
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+      # Scorecard Signed-Releases looks for a `*.intoto.jsonl` asset ON the release. Attest the
+      # GoReleaser artifacts and attach the provenance bundle as a release asset.
       - name: Attest build provenance
         id: attest
         uses: actions/attest-build-provenance@0f67c3f4856b2e3261c31976d6725780e5e4c373 # v4.1.1
         with:
           subject-path: |
-            scankit-${{ github.ref_name }}.tar.gz
-            scankit.spdx.json
+            dist/scankit-*.tar.gz
+            dist/checksums.txt
 
-      # Scorecard Signed-Releases looks for a `*.intoto.jsonl` asset ON the release, not the OCI
-      # attestation. Copy the attestation bundle produced above and ship it as a release asset.
-      - name: Stage provenance asset
+      - name: Attach provenance asset
         env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ github.ref_name }}
           BUNDLE: ${{ steps.attest.outputs.bundle-path }}
-        run: cp "$BUNDLE" provenance.intoto.jsonl
-
-      - name: Install Cosign
-        uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
-
-      # Cosign 3.x (shipped by cosign-installer v4) uses the new bundle format: --output-signature
-      # / --output-certificate are deprecated; the signature + certificate go into a single
-      # --bundle file. Verify with `cosign verify-blob --bundle scankit-<tag>.tar.gz.cosign.bundle`.
-      - name: Sign the source archive (keyless)
-        env:
-          ARCHIVE: scankit-${{ github.ref_name }}.tar.gz
-        run: cosign sign-blob --yes --bundle "${ARCHIVE}.cosign.bundle" "${ARCHIVE}"
-
-      - name: Publish GitHub release
-        uses: softprops/action-gh-release@3d0d9888cb7fd7b750713d6e236d1fcb99157228 # v3.0.2
-        with:
-          generate_release_notes: true
-          files: |
-            scankit-${{ github.ref_name }}.tar.gz
-            scankit-${{ github.ref_name }}.tar.gz.cosign.bundle
-            provenance.intoto.jsonl
-            checksums.txt
-            scankit.spdx.json
+        run: |
+          cp "$BUNDLE" provenance.intoto.jsonl
+          gh release upload "$TAG" provenance.intoto.jsonl --clobber
