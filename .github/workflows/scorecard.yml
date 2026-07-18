@@ -16,6 +16,9 @@ jobs:
     # Skips while the repo is private; activates automatically once public.
     if: ${{ !github.event.repository.private }}
     runs-on: ubuntu-24.04
+    # The read-only PAT (repo + read:org) lives in this protected environment, so Scorecard can
+    # read the full branch-protection settings its Branch-Protection check needs.
+    environment: security
     permissions:
       contents: read
       security-events: write
@@ -36,6 +39,8 @@ jobs:
           results_file: results.sarif
           results_format: sarif
           publish_results: true
+          # Elevated read so the Branch-Protection and other checks see the full picture.
+          repo_token: ${{ secrets.PLUMBER_ADMIN_TOKEN }}
 
       - name: Upload SARIF
         uses: github/codeql-action/upload-sarif@9e0d7b8d25671d64c341c19c0152d693099fb5ba # v4.35.5
