@@ -1,0 +1,8 @@
+# zizmor configuration. Findings are acquitted TARGETED (by rule + file), never by disabling a
+# rule globally, so any new occurrence still trips.
+rules:
+  superfluous-actions:
+    ignore:
+      # softprops/action-gh-release is a deliberate, widely-used, SHA-pinned choice for
+      # uploading release assets + notes; kept over an ad-hoc `gh release` script step.
+      - release.yml

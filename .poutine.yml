@@ -8,3 +8,6 @@ skip:
   - rule: github_action_from_unverified_creator_used
     purl:
       - pkg:githubactions/softprops/action-gh-release
+      # The CI/CD trust-policy scanner this repo's plumber.yml runs; pinned by SHA, and the
+      # action verifies the SLSA build-provenance of the binary it fetches before running it.
+      - pkg:githubactions/getplumber/plumber
