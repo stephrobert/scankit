@@ -19,16 +19,10 @@ sboms:
   - id: source
     artifacts: source
 
-# Cosign 3.x keyless signature over the checksums file (covers every artifact via its hash).
-signs:
-  - cmd: cosign
-    args:
-      - sign-blob
-      - "--yes"
-      - "--bundle=${artifact}.cosign.bundle"
-      - "${artifact}"
-    artifacts: checksum
-    output: true
+# No Cosign signing here: the release workflow attaches a native SLSA provenance bundle
+# (provenance.intoto.jsonl) which already satisfies Scorecard Signed-Releases. Keeping
+# GoReleaser to the artifacts it owns (source archive, checksums, SBOM) avoids the
+# signature-name mismatch and keeps the release deterministic.
 
 changelog:
   disable: true
