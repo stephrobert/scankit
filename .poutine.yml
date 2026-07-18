@@ -1,0 +1,10 @@
+# Poutine (CI/CD supply-chain analysis) config for scankit.
+# https://github.com/boostsecurityio/poutine
+#
+# Objective: zero findings. Third-party actions we deliberately adopt and pin by 40-char commit
+# SHA are acquitted TARGETED, by package, never by disabling the rule globally — so any NEW
+# unverified action still trips the rule and gets reviewed.
+skip:
+  - rule: github_action_from_unverified_creator_used
+    purl:
+      - pkg:githubactions/softprops/action-gh-release

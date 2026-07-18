@@ -1,0 +1,69 @@
+name: Release
+
+# Tag-triggered release for the library. scankit ships no binary — the deliverable is the
+# tagged Go module. This job builds a source archive + SBOM, produces an SLSA build-provenance
+# attestation over them, and publishes a GitHub release with generated notes. Consumers get a
+# verifiable, SBOM-documented release to pin.
+
+on:
+  push:
+    tags: ['v*']
+
+permissions: {}
+
+jobs:
+  release:
+    name: Publish release
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write      # create the release
+      id-token: write      # SLSA provenance signing
+      attestations: write  # attach the attestation
+    steps:
+      - name: Harden runner
+        uses: step-security/harden-runner@bf7454d06d71f1098171f2acdf0cd4708d7b5920 # v2.20.0
+        with:
+          egress-policy: audit
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: Setup Go
+        uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6.4.0
+        with:
+          go-version: '1.26'
+          cache-dependency-path: go.sum
+
+      - name: Verify the module builds and tests pass
+        run: |
+          go build ./...
+          go test ./...
+
+      - name: Build source archive + checksums
+        run: |
+          git archive --format=tar.gz --prefix="scankit-${GITHUB_REF_NAME}/" -o "scankit-${GITHUB_REF_NAME}.tar.gz" HEAD
+          sha256sum "scankit-${GITHUB_REF_NAME}.tar.gz" > checksums.txt
+
+      - name: Generate SBOM
+        uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610 # v0.24.0
+        with:
+          format: spdx-json
+          output-file: scankit.spdx.json
+          upload-artifact: false
+
+      - name: Attest build provenance
+        uses: actions/attest-build-provenance@977bb373ede98d70efdf65b84cb5f73e068c6d02 # v3.0.0
+        with:
+          subject-path: |
+            scankit-${{ github.ref_name }}.tar.gz
+            scankit.spdx.json
+
+      - name: Publish GitHub release
+        uses: softprops/action-gh-release@72f2c25fcb47643c292f7107632f7a47c1df5cd8 # v2.3.2
+        with:
+          generate_release_notes: true
+          files: |
+            scankit-${{ github.ref_name }}.tar.gz
+            checksums.txt
+            scankit.spdx.json

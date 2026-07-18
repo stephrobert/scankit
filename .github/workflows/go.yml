@@ -1,0 +1,69 @@
+name: Go
+
+# Quality gate for scankit: formatting, vet, build, race-tested units, fuzzing,
+# golangci-lint and govulncheck. Actions pinned by commit SHA; tools pinned by version.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  quality:
+    name: Build, test, lint, vuln-scan
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    steps:
+      - name: Harden runner
+        uses: step-security/harden-runner@bf7454d06d71f1098171f2acdf0cd4708d7b5920 # v2.20.0
+        with:
+          egress-policy: audit
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: Setup Go
+        uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6.4.0
+        with:
+          go-version: '1.26'
+          cache-dependency-path: go.sum
+
+      - name: gofmt
+        run: |
+          unformatted="$(gofmt -l .)"
+          if [ -n "$unformatted" ]; then
+            echo "These files are not gofmt-clean:"; echo "$unformatted"; exit 1
+          fi
+
+      - name: go vet
+        run: go vet ./...
+
+      - name: go build
+        run: go build ./...
+
+      - name: go test (race)
+        run: go test -race ./...
+
+      # Fuzz the surface fed by input the consuming tool does not control: the (well-formed
+      # but arbitrary) scan input reaching the Rego engine, and the finding fields reaching
+      # the renderers. Seed corpora run on every `go test`; this step briefly mutates so a
+      # regression surfaces here rather than in a downstream product.
+      - name: go test (fuzz)
+        run: |
+          go test ./engine -run '^$' -fuzz '^FuzzEvaluate$' -fuzztime=45s
+          go test ./report -run '^$' -fuzz '^FuzzRenderers$' -fuzztime=45s
+
+      - name: golangci-lint
+        run: |
+          go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.12.2
+          "$(go env GOPATH)/bin/golangci-lint" run ./...
+
+      - name: govulncheck
+        run: |
+          go install golang.org/x/vuln/cmd/govulncheck@v1.3.0
+          "$(go env GOPATH)/bin/govulncheck" ./...

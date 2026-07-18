@@ -17,6 +17,30 @@ import (
 
 const hrWidth = 78
 
+// errWriter est le motif « sticky-error writer » recommandé par la documentation Go
+// (https://go.dev/blog/errors-are-values) et utilisé dans la stdlib (bufio.Writer,
+// archive/zip) : dès la première erreur d'écriture, chaque appel suivant devient un
+// no-op et l'erreur est mémorisée, puis remontée une seule fois par l'appelant. Cela
+// évite de vérifier le retour de chaque Fprintln du rendu terminal sans jamais l'ignorer.
+type errWriter struct {
+	w   io.Writer
+	err error
+}
+
+func (ew *errWriter) println(a ...any) {
+	if ew.err != nil {
+		return
+	}
+	_, ew.err = fmt.Fprintln(ew.w, a...)
+}
+
+func (ew *errWriter) printf(format string, a ...any) {
+	if ew.err != nil {
+		return
+	}
+	_, ew.err = fmt.Fprintf(ew.w, format, a...)
+}
+
 // Palette sévérité (fixe) ; la couleur de marque est paramétrable via Options.
 var (
 	colCritical = lipgloss.Color("#dc2626")
@@ -130,48 +154,54 @@ func truncate(s string, n int) string {
 	return string([]rune(s)[:n-1]) + "…"
 }
 
-// Banner écrit le logo + la tagline (typiquement sur stderr).
-func Banner(w io.Writer, opts Options) {
+// Banner écrit le logo + la tagline (typiquement sur stderr). Retourne la première
+// erreur d'écriture, ou nil.
+func Banner(w io.Writer, opts Options) error {
+	ew := &errWriter{w: w}
 	brand := lipgloss.NewStyle().Foreground(opts.Brand).Bold(true)
-	fmt.Fprintln(w)
+	ew.println()
 	for _, l := range opts.Banner {
-		fmt.Fprintln(w, " "+brand.Render(l))
+		ew.println(" " + brand.Render(l))
 	}
 	if opts.Tagline != "" {
-		fmt.Fprintln(w)
+		ew.println()
 		tag := stMuted.Render("v"+opts.Version) + "  " + lipgloss.NewStyle().Foreground(colLow).Render("· "+opts.Tagline)
-		fmt.Fprintln(w, " "+tag)
+		ew.println(" " + tag)
 	}
-	fmt.Fprintln(w)
+	ew.println()
+	return ew.err
 }
 
-// Terminal écrit le rapport humain complet.
-func Terminal(w io.Writer, opts Options, findings []finding.Finding, sum scoring.Summary) {
-	writeHeader(w, opts)
+// Terminal écrit le rapport humain complet. Retourne la première erreur d'écriture,
+// ou nil.
+func Terminal(w io.Writer, opts Options, findings []finding.Finding, sum scoring.Summary) error {
+	ew := &errWriter{w: w}
+	writeHeader(ew, opts)
 	if len(findings) == 0 {
-		fmt.Fprintln(w, "  "+stOK.Render("✓")+" "+stValue.Render("No deviations found in the audited scope."))
-		fmt.Fprintln(w)
-		writeSummary(w, opts, sum)
-		return
+		ew.println("  " + stOK.Render("✓") + " " + stValue.Render("No deviations found in the audited scope."))
+		ew.println()
+		writeSummary(ew, opts, sum)
+		return ew.err
 	}
-	writeImmediateActions(w, findings)
+	writeImmediateActions(ew, findings)
 	order, byCode := groupByCode(findings)
 	for _, c := range order {
-		writeCodeGroup(w, opts, byCode[c])
+		writeCodeGroup(ew, opts, byCode[c])
 	}
 	if !opts.HideTable {
-		writeControlsTable(w, opts, order, byCode)
+		writeControlsTable(ew, opts, order, byCode)
 	}
-	writeSummary(w, opts, sum)
+	writeSummary(ew, opts, sum)
+	return ew.err
 }
 
-func writeHeader(w io.Writer, opts Options) {
+func writeHeader(ew *errWriter, opts Options) {
 	bar := stRule.Render(strings.Repeat("─", hrWidth))
-	fmt.Fprintln(w, bar)
-	fmt.Fprintln(w, " "+stMuted.Render(fmt.Sprintf("%-8s", "Mode"))+"  "+stValue.Render(opts.Mode))
-	fmt.Fprintln(w, " "+stMuted.Render(fmt.Sprintf("%-8s", "Source"))+"  "+stValue.Render(opts.Source))
-	fmt.Fprintln(w, bar)
-	fmt.Fprintln(w)
+	ew.println(bar)
+	ew.println(" " + stMuted.Render(fmt.Sprintf("%-8s", "Mode")) + "  " + stValue.Render(opts.Mode))
+	ew.println(" " + stMuted.Render(fmt.Sprintf("%-8s", "Source")) + "  " + stValue.Render(opts.Source))
+	ew.println(bar)
+	ew.println()
 }
 
 type codeGroup struct {
@@ -215,46 +245,46 @@ func groupByCode(findings []finding.Finding) ([]string, map[string]*codeGroup) {
 	return order, by
 }
 
-func writeCodeGroup(w io.Writer, opts Options, g *codeGroup) {
+func writeCodeGroup(ew *errWriter, opts Options, g *codeGroup) {
 	sc := sevColor(g.Severity)
 	bar := stRule.Render(strings.Repeat("─", hrWidth))
 	sevTag := lipgloss.NewStyle().Foreground(sc).Bold(true).Render(strings.ToUpper(g.Severity))
 	tier := tierOf(opts, g.Findings[0])
 
-	fmt.Fprintln(w)
-	fmt.Fprintln(w, bar)
+	ew.println()
+	ew.println(bar)
 	head := " " + sevTag + stMuted.Render("  ·  ") + lipgloss.NewStyle().Foreground(colLow).Render(g.Code)
 	if tier != "" {
 		head += stMuted.Render("  ·  ") + stMuted.Render(tier)
 	}
-	fmt.Fprintln(w, head)
-	fmt.Fprintln(w, " "+stTitle.Render(truncate(g.Title, hrWidth-2)))
-	fmt.Fprintln(w, bar)
-	fmt.Fprintln(w, "  "+stMuted.Render("Total deviations:")+" "+lipgloss.NewStyle().Foreground(sc).Bold(true).Render(fmt.Sprintf("%d", len(g.Findings))))
-	fmt.Fprintln(w)
-	fmt.Fprintln(w, "  "+stMuted.Render("Details:"))
+	ew.println(head)
+	ew.println(" " + stTitle.Render(truncate(g.Title, hrWidth-2)))
+	ew.println(bar)
+	ew.println("  " + stMuted.Render("Total deviations:") + " " + lipgloss.NewStyle().Foreground(sc).Bold(true).Render(fmt.Sprintf("%d", len(g.Findings))))
+	ew.println()
+	ew.println("  " + stMuted.Render("Details:"))
 	for _, f := range g.Findings {
 		sev := lipgloss.NewStyle().Foreground(sevColor(f.Severity)).Bold(true).Render(shortSev(f.Severity))
-		fmt.Fprintf(w, "      %s  %s — %s\n", sev, stValue.Render(f.Subject), stValue.Render(stripSubject(f.Message)))
+		ew.printf("      %s  %s — %s\n", sev, stValue.Render(f.Subject), stValue.Render(stripSubject(f.Message)))
 	}
 	if rem := g.Findings[0].Remediation; rem != "" {
-		fmt.Fprintln(w)
-		fmt.Fprintln(w, "  "+stMuted.Render("Remediation"))
+		ew.println()
+		ew.println("  " + stMuted.Render("Remediation"))
 		for _, l := range strings.Split(strings.TrimRight(rem, "\n"), "\n") {
-			fmt.Fprintln(w, "    "+stValue.Render(l))
+			ew.println("    " + stValue.Render(l))
 		}
 	}
 	if opts.DocURL != nil {
 		if u := opts.DocURL(g.Findings[0]); u != "" {
-			fmt.Fprintln(w)
-			fmt.Fprintln(w, "  "+stMuted.Render("↳ docs: ")+lipgloss.NewStyle().Foreground(colLow).Render(u))
+			ew.println()
+			ew.println("  " + stMuted.Render("↳ docs: ") + lipgloss.NewStyle().Foreground(colLow).Render(u))
 		}
 	}
 }
 
-func writeControlsTable(w io.Writer, opts Options, order []string, byCode map[string]*codeGroup) {
-	fmt.Fprintln(w)
-	fmt.Fprintln(w, "  "+stMuted.Render("Controls"))
+func writeControlsTable(ew *errWriter, opts Options, order []string, byCode map[string]*codeGroup) {
+	ew.println()
+	ew.println("  " + stMuted.Render("Controls"))
 	headers := []string{"Code", "Control", "Sev", "Tier", "#"}
 	rows := make([][]string, 0, len(order))
 	for _, c := range order {
@@ -267,10 +297,10 @@ func writeControlsTable(w io.Writer, opts Options, order []string, byCode map[st
 			fmt.Sprintf("%d", len(g.Findings)),
 		})
 	}
-	writeBoxTable(w, "  ", headers, rows, []bool{false, false, false, false, true})
+	writeBoxTable(ew, "  ", headers, rows, []bool{false, false, false, false, true})
 }
 
-func writeImmediateActions(w io.Writer, findings []finding.Finding) {
+func writeImmediateActions(ew *errWriter, findings []finding.Finding) {
 	sorted := make([]finding.Finding, len(findings))
 	copy(sorted, findings)
 	sort.SliceStable(sorted, func(i, j int) bool {
@@ -281,35 +311,35 @@ func writeImmediateActions(w io.Writer, findings []finding.Finding) {
 		top = top[:3]
 	}
 	bar := stRule.Render(strings.Repeat("─", hrWidth))
-	fmt.Fprintln(w, bar)
-	fmt.Fprintln(w, " "+stTitle.Render(fmt.Sprintf("⚡ Immediate action — top %d most severe deviations", len(top))))
-	fmt.Fprintln(w, bar)
-	fmt.Fprintln(w)
+	ew.println(bar)
+	ew.println(" " + stTitle.Render(fmt.Sprintf("⚡ Immediate action — top %d most severe deviations", len(top))))
+	ew.println(bar)
+	ew.println()
 	for i, f := range top {
-		fmt.Fprintf(w, "  %d. %s %s  %s — %s\n", i+1, sevIcon(f.Severity), shortSev(f.Severity),
+		ew.printf("  %d. %s %s  %s — %s\n", i+1, sevIcon(f.Severity), shortSev(f.Severity),
 			lipgloss.NewStyle().Bold(true).Render(f.Code), truncate(stripSubject(f.Message), 64))
-		fmt.Fprintf(w, "     %s %s\n", stMuted.Render("subject:"), f.Subject)
+		ew.printf("     %s %s\n", stMuted.Render("subject:"), f.Subject)
 	}
-	fmt.Fprintln(w)
+	ew.println()
 }
 
-func writeSummary(w io.Writer, opts Options, sum scoring.Summary) {
+func writeSummary(ew *errWriter, opts Options, sum scoring.Summary) {
 	bar := stRule.Render(strings.Repeat("─", hrWidth))
-	fmt.Fprintln(w, bar)
-	fmt.Fprintln(w, " "+lipgloss.NewStyle().Foreground(opts.Brand).Bold(true).Render("Summary"))
-	fmt.Fprintln(w)
+	ew.println(bar)
+	ew.println(" " + lipgloss.NewStyle().Foreground(opts.Brand).Bold(true).Render("Summary"))
+	ew.println()
 	if opts.SummaryHeadline != "" {
-		fmt.Fprintln(w, " "+stValue.Render(opts.SummaryHeadline))
-		fmt.Fprintln(w)
+		ew.println(" " + stValue.Render(opts.SummaryHeadline))
+		ew.println()
 	}
 	counts := fmt.Sprintf("🔴 CRITICAL %d   🟠 HIGH %d   🟡 MEDIUM %d   🔵 LOW %d",
 		sum.Counts["critical"], sum.Counts["high"], sum.Counts["medium"], sum.Counts["low"])
-	fmt.Fprintln(w, " "+counts)
-	fmt.Fprintln(w, bar)
+	ew.println(" " + counts)
+	ew.println(bar)
 }
 
 // writeBoxTable rend un tableau à bordures Unicode (╭─┬─╮ / ├─┼─┤ / ╰─┴─╯).
-func writeBoxTable(w io.Writer, indent string, headers []string, rows [][]string, rightAlign []bool) {
+func writeBoxTable(ew *errWriter, indent string, headers []string, rows [][]string, rightAlign []bool) {
 	ncol := len(headers)
 	widths := make([]int, ncol)
 	for i, h := range headers {
@@ -353,11 +383,11 @@ func writeBoxTable(w io.Writer, indent string, headers []string, rows [][]string
 		sep := stRule.Render("│")
 		return indent + sep + strings.Join(parts, sep) + sep
 	}
-	fmt.Fprintln(w, line("╭", "┬", "╮", "─"))
-	fmt.Fprintln(w, row(headers))
-	fmt.Fprintln(w, line("├", "┼", "┤", "─"))
+	ew.println(line("╭", "┬", "╮", "─"))
+	ew.println(row(headers))
+	ew.println(line("├", "┼", "┤", "─"))
 	for _, r := range rows {
-		fmt.Fprintln(w, row(r))
+		ew.println(row(r))
 	}
-	fmt.Fprintln(w, line("╰", "┴", "╯", "─"))
+	ew.println(line("╰", "┴", "╯", "─"))
 }
