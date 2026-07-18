@@ -1,0 +1,41 @@
+# goreleaser config for scankit. scankit is a LIBRARY: no binary is built. goreleaser is used
+# as the recognized publishing workflow (Scorecard Packaging) and to produce a reproducible
+# source archive, checksums, an SBOM, and a keyless Cosign signature over the checksums.
+version: 2
+
+project_name: scankit
+
+builds:
+  - skip: true # library — nothing to compile
+
+source:
+  enabled: true
+  name_template: "{{ .ProjectName }}-{{ .Tag }}"
+
+checksum:
+  name_template: "checksums.txt"
+
+sboms:
+  - id: source
+    artifacts: source
+
+# Cosign 3.x keyless signature over the checksums file (covers every artifact via its hash).
+signs:
+  - cmd: cosign
+    args:
+      - sign-blob
+      - "--yes"
+      - "--bundle=${artifact}.cosign.bundle"
+      - "${artifact}"
+    artifacts: checksum
+    output: true
+
+changelog:
+  disable: true
+
+release:
+  github:
+    owner: stephrobert
+    name: scankit
+  draft: false
+  prerelease: auto
