@@ -36,7 +36,8 @@ once, so a new scanner is *just its rules and its collectors*.
 | [`engine`](docs/engine.md) | Load `.rego` from one or more `fs.FS`, auto-discover packages, aggregate each package's `deny` rule into sorted findings. |
 | [`finding`](docs/finding.md) | The shared `Finding` type (code, severity, subject, message, remediation, free-form labels) and `SeverityRank`. |
 | [`scoring`](docs/scoring.md) | Severity counters and the SCSL level verdict (`Summarize`, `NiveauAtteint`). Grade/score stays in the product. |
-| [`report`](docs/report.md) | Homogeneous rendering: rich lipgloss `Terminal`, `SARIF` 2.1.0, `CSV`, `JUnit`. Brand and tier labels injected via `Options`. |
+| [`assessment`](docs/assessment.md) | Opposable audit model: a per-control `Result` (typed status, evidence observed-vs-expected + source, exact normative references) and a `Run` provenance envelope. Bridges to `Finding`; renders to OSCAL. |
+| [`report`](docs/report.md) | Homogeneous rendering: rich lipgloss `Terminal`, `SARIF` 2.1.0, `CSV`, `JUnit`, and `OSCAL` 1.1.2 assessment-results. Brand and tier labels injected via `Options`. |
 
 ## Install
 

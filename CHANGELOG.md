@@ -6,6 +6,23 @@ All notable changes to scankit are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-07-18
+
+### Added
+- **`assessment` package** — the opposable audit model. `Result` carries a typed `Status`
+  (pass/fail/not-applicable/not-evaluated/error), `Evidence` (observed vs expected + source +
+  type + proves-triple) and exact `Reference`s; `Run` is a provenance envelope (tool/ruleset
+  digests, target, timestamp, source, scope). `Assessment` bridges to `finding.Finding`
+  (`Finding()`, `Findings()`), summarizes by status, and reports conformance. Complements
+  `finding` (which only models failures) so "no finding" is never confused with "compliant".
+- **`report.OSCAL`** — deterministic OSCAL 1.1.2 **assessment-results** (reviewed-controls +
+  observations + findings), with run provenance stamped into metadata props. Machine-exchange
+  form of an opposable audit dossier.
+- Fuzz target `FuzzOSCAL`.
+
+This release is purely additive: `finding`, `engine`, `scoring` and the existing `report`
+renderers are unchanged.
+
 ## [0.1.3] - 2026-07-18
 
 First fully signed public release.
@@ -40,6 +57,7 @@ pitstop and pavois security scanners.
   (build/test/vet/govulncheck, CodeQL, OpenSSF Scorecard, dependency-review, Trivy,
   OSV-Scanner, TruffleHog, SBOM) and an SLSA-attested release workflow.
 
-[Unreleased]: https://github.com/stephrobert/scankit/compare/v0.1.3...HEAD
+[Unreleased]: https://github.com/stephrobert/scankit/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/stephrobert/scankit/releases/tag/v0.2.0
 [0.1.3]: https://github.com/stephrobert/scankit/releases/tag/v0.1.3
 [0.1.0]: https://github.com/stephrobert/scankit/releases/tag/v0.1.0

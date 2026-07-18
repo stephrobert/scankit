@@ -57,6 +57,7 @@ jobs:
         run: |
           go test ./engine -run '^$' -fuzz '^FuzzEvaluate$' -fuzztime=45s
           go test ./report -run '^$' -fuzz '^FuzzRenderers$' -fuzztime=45s
+          go test ./report -run '^$' -fuzz '^FuzzOSCAL$' -fuzztime=45s
 
       - name: golangci-lint
         run: |
