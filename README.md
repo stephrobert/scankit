@@ -2,11 +2,15 @@
 
 **Shared engine, findings, scoring and reporting for OPA/Rego security scanners.**
 
-[![Go Reference](https://pkg.go.dev/badge/github.com/stephrobert/scankit.svg)](https://pkg.go.dev/github.com/stephrobert/scankit)
 [![Go](https://github.com/stephrobert/scankit/actions/workflows/go.yml/badge.svg)](https://github.com/stephrobert/scankit/actions/workflows/go.yml)
+[![CodeQL](https://github.com/stephrobert/scankit/actions/workflows/codeql.yml/badge.svg)](https://github.com/stephrobert/scankit/actions/workflows/codeql.yml)
+[![Scorecard](https://github.com/stephrobert/scankit/actions/workflows/scorecard.yml/badge.svg)](https://github.com/stephrobert/scankit/actions/workflows/scorecard.yml)
+[![Plumber](https://github.com/stephrobert/scankit/actions/workflows/plumber.yml/badge.svg)](https://github.com/stephrobert/scankit/actions/workflows/plumber.yml)
 [![OpenSSF Scorecard](https://api.securityscorecards.dev/projects/github.com/stephrobert/scankit/badge)](https://scorecard.dev/viewer/?uri=github.com/stephrobert/scankit)
-[![Go Report Card](https://goreportcard.com/badge/github.com/stephrobert/scankit)](https://goreportcard.com/report/github.com/stephrobert/scankit)
-[![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
+[![Plumber Score](https://score.getplumber.io/github.com/stephrobert/scankit.svg)](https://score.getplumber.io/github.com/stephrobert/scankit)
+[![SLSA 3](https://slsa.dev/images/gh-badge-level3.svg)](https://slsa.dev)
+[![Go Reference](https://pkg.go.dev/badge/github.com/stephrobert/scankit.svg)](https://pkg.go.dev/github.com/stephrobert/scankit)
+[![License: Apache-2.0](https://img.shields.io/badge/License-Apache--2.0-blue.svg)](LICENSE)
 
 scankit is the small, focused Go library that a family of security scanners share so
 they behave identically: **[pepin](https://github.com/stephrobert/pepin)** (multi-cloud

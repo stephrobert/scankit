@@ -1,0 +1,62 @@
+name: Plumber
+
+# Validates scankit's own CI/CD with Plumber (getplumber.io): analyzes the GitHub Actions
+# workflows + repo settings against .plumber.yaml, uploads findings to Code Scanning, publishes
+# the compliance score to the README badge, and fails below the threshold. The action verifies
+# the downloaded Plumber binary's SLSA build-provenance before running it.
+#
+# Runs ONLY in trusted contexts (push to main, manual): it needs a privileged token
+# (Administration:read) to verify branch protection, and that secret must never reach a
+# pull_request run — especially from forks.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  plumber:
+    name: Plumber (trust policy CI/CD)
+    # Skips while private (SARIF upload needs Advanced Security, free on public repos);
+    # activates automatically once the repo is public.
+    if: ${{ !github.event.repository.private }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    # The privileged PAT lives in this protected environment, restricted to main —
+    # unreachable from pull_request runs.
+    environment: security
+    permissions:
+      contents: read
+      security-events: write # upload SARIF to Code Scanning
+      actions: read # read the workflow run for Plumber status
+      id-token: write # OIDC to publish the score to score.getplumber.io
+    steps:
+      - name: Harden runner
+        uses: step-security/harden-runner@bf7454d06d71f1098171f2acdf0cd4708d7b5920 # v2.20.0
+        with:
+          egress-policy: audit
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: Plumber compliance scan
+        uses: getplumber/plumber@6363eb0229636fb7463e9431281ad7584a65c964 # v0.4.6
+        with:
+          # Strict gate from day one: any non-compliance fails the workflow.
+          min-points: "100"
+          soft-fail: false
+          # Verify the SLSA provenance of the downloaded plumber binary before running it.
+          verify-attestation: true
+          # Publish the score to the badge (OIDC, public repo).
+          score-push: true
+          # Fine-grained PAT (Administration + Contents + Metadata = Read), stored as an
+          # environment secret in the protected `security` environment, so
+          # branchMustBeProtected is verified for real instead of abstained.
+          github-token: ${{ secrets.PLUMBER_ADMIN_TOKEN }}
