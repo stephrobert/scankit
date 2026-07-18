@@ -1,0 +1,45 @@
+name: Bug report
+description: Report a defect in scankit (wrong findings, panic, bad output).
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the report. For security issues, use private reporting instead — see SECURITY.md.
+  - type: input
+    id: version
+    attributes:
+      label: scankit version
+      description: Module version or commit (e.g. v0.1.2).
+      placeholder: v0.1.2
+    validations:
+      required: true
+  - type: dropdown
+    id: package
+    attributes:
+      label: Affected package
+      options: [engine, finding, scoring, report, unsure]
+    validations:
+      required: true
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: What did you observe, and what did you expect instead?
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Minimal reproducer
+      description: A small Go snippet or input that triggers the issue.
+      render: go
+    validations:
+      required: false
+  - type: input
+    id: go-version
+    attributes:
+      label: Go version
+      placeholder: go version go1.26.5 linux/amd64
+    validations:
+      required: false

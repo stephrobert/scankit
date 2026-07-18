@@ -1,0 +1,30 @@
+name: Feature request
+description: Suggest an addition to scankit's engine, finding model, scoring or renderers.
+labels: [enhancement]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        scankit stays intentionally small: product-specific behaviour belongs in the consuming
+        tools (pepin, pitstop, pavois). Please explain why this belongs in the shared library.
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What are you trying to do that scankit makes hard today?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed change
+      description: What API or behaviour would you add or change?
+    validations:
+      required: true
+  - type: textarea
+    id: why-shared
+    attributes:
+      label: Why does this belong in scankit?
+      description: How does it benefit more than one consumer, and keep the API stable?
+    validations:
+      required: true
