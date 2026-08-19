@@ -34,7 +34,10 @@ jobs:
       - name: Setup Go
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
-          go-version: '1.26'
+          # go.mod fait foi : `go-version: '1.26'` laisse setup-go réutiliser la
+          # version déjà présente sur le runner (1.26.5), qui ne satisfait plus
+          # la directive `go` du module avec GOTOOLCHAIN=local.
+          go-version-file: go.mod
           cache: false # anti cache-poisoning on a tag-triggered release (zizmor GHA-23)
 
       - name: Verify the module builds and tests pass
