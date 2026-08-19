@@ -48,11 +48,14 @@ func Evaluate(ctx context.Context, input any, sources ...fs.FS) ([]finding.Findi
 	}
 
 	// Modules communs à toutes les requêtes (compilés une fois par requête).
-	base := make([]func(*rego.Rego), 0, len(modules)+2)
+	base := make([]func(*rego.Rego), 0, len(modules)+3)
 	for name, src := range modules {
 		base = append(base, rego.Module(name, src))
 	}
 	base = append(base, rego.Input(norm))
+	// Capacités restreintes : une politique est du code tiers, elle n'accède pas
+	// au réseau ni à l'environnement du processus (cf. capabilities.go).
+	base = append(base, rego.Capabilities(restrictedCapabilities()))
 
 	var findings []finding.Finding
 	for _, q := range queries {

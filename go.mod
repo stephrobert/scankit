@@ -1,6 +1,6 @@
 module github.com/stephrobert/scankit
 
-go 1.26.5
+go 1.26.6
 
 require (
 	github.com/charmbracelet/lipgloss v1.1.0

@@ -6,6 +6,29 @@ All notable changes to scankit are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.2.2] - 2026-08-19
+
+### Security
+- **`engine.Evaluate` no longer grants policies network access.** Policies were compiled with
+  OPA's default capabilities, which include `http.send`, `net.lookup_ip_addr` and `opa.runtime`.
+  A policy is third-party code — pepin hot-loads directories of them through `--policy-dir`,
+  without recompiling — so an eight-line rule could POST the evaluated input (a full cloud
+  inventory: instance user-data, IAM policy documents, bucket policies) to an arbitrary host,
+  or sweep the runner's internal network from inside the scanner. The three builtins are now
+  removed from the capability set handed to the compiler, so calling one is a compile-time
+  error rather than a silent request.
+
+  A posture rule decides from the input it is given and has no legitimate reason to emit a
+  request, so this costs no functionality: verified against the rule sets of both consumers
+  (pepin's 240 Rego tests, pitstop's suites), neither of which calls these builtins.
+  `TestNetworkBuiltinsAreDenied` fails on 0.2.1 with a witness server recording a real
+  request, and passes here.
+
+  **Behaviour change**: a policy that did call one of these builtins now fails to compile.
+
+### Changed
+- Toolchain moved to Go 1.26.6 (1.26.5 carries eight standard-library advisories).
+
 ## [0.2.1] - 2026-07-18
 
 ### Fixed
