@@ -24,8 +24,13 @@ sboms:
 # GoReleaser to the artifacts it owns (source archive, checksums, SBOM) avoids the
 # signature-name mismatch and keeps the release deterministic.
 
+# The release body is the CHANGELOG section for the tag, handed to goreleaser by the release
+# workflow with --release-notes. That flag is only honoured when the changelog pipe runs:
+# with `disable: true` goreleaser skips the pipe and publishes an empty body — verified against
+# a stub GitHub API, where the create-release call carried `"body":"\n"` with the flag set and
+# the CHANGELOG section without it. Hence `disable: false`, explicitly, so nobody flips it back.
 changelog:
-  disable: true
+  disable: false
 
 release:
   github:
