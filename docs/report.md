@@ -7,8 +7,8 @@ layout and severity palette are fixed so two tools look like siblings.
 ## Renderers
 
 ```go
-func Banner(w io.Writer, opts Options)                                        // logo + tagline (usually stderr)
-func Terminal(w io.Writer, opts Options, findings []finding.Finding, sum scoring.Summary)
+func Banner(w io.Writer, opts Options) error                                  // logo + tagline (usually stderr)
+func Terminal(w io.Writer, opts Options, findings []finding.Finding, sum scoring.Summary) error
 func SARIF(w io.Writer, opts Options, source string, findings []finding.Finding) error // SARIF 2.1.0
 func CSV(w io.Writer, findings []finding.Finding) error                       // one row per finding
 func JUnit(w io.Writer, opts Options, findings []finding.Finding, total int) error     // JUnit XML

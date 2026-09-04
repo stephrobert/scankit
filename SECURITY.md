@@ -25,6 +25,11 @@ coordinate a release and, where appropriate, request a CVE and credit the report
 ## Scope
 
 scankit is a library: it evaluates OPA/Rego policies over caller-supplied input and
-renders findings. It performs no network I/O and executes no input. Reports about the
+renders findings. It performs no network I/O of its own and executes no input — with one
+caveat worth stating plainly, because it was false until 0.2.3: a **policy** handed to
+`engine.Evaluate` is third-party code, and OPA used to let it reach the network through a
+JSON-Schema `$ref` even after the network builtins were removed. Since 0.2.3 the capability
+set denies every host (`AllowNet: []string{}`), and the guard is asserted by counting
+requests a witness server receives, not by trusting an error to be raised. Reports about the
 engine mishandling untrusted policy input or scan input are in scope; issues in the
 consuming products (pepin, pitstop, pavois) belong in their own repositories.
