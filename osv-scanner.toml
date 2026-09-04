@@ -1,7 +1,20 @@
-# OSV-Scanner ignore list. Each entry is an advisory that is unreachable from scankit's
-# code AND has no fixed version available, so it cannot be resolved by upgrading. Reviewed
-# manually; revisit if a fix ships.
-
-[[IgnoredVulns]]
-id = "GO-2026-5932"
-reason = "golang.org/x/crypto/openpgp is unmaintained and flagged with no fix (Fixed in: N/A). scankit only uses the OPA Rego engine and never imports openpgp; govulncheck confirms the code does not call it. Pulled transitively via open-policy-agent/opa."
+# OSV-Scanner ignore policy for scankit.
+#
+# The scan runs with `--call-analysis=go` on the module's own toolchain (see
+# .github/workflows/osv-scanner.yml), so an advisory in a package scankit never calls is
+# already filtered out and needs no entry here. This file is for the case call analysis
+# cannot settle: an advisory that IS reachable, or that carries no call information, and has
+# no fixed version to upgrade to.
+#
+# Every entry carries, without exception:
+#   - `reason`   — why it is accepted, in terms of what scankit actually does;
+#   - `ignoreUntil` — the date the decision expires. Verified against osv-scanner 2.3.8: a
+#     future date filters the advisory, a past date lets it back into the report on its own.
+# An ignored advisory is a dated decision, not a permanent hole.
+#
+# GO-2026-5932 (golang.org/x/crypto/openpgp, unmaintained, no fix available) used to be listed
+# here. It no longer is: call analysis drops it on its own — verified with
+# `osv-scanner scan source --call-analysis=go --config /dev/null .`, which reports 0
+# vulnerabilities on this tree. A standing exception that nothing needs is a hole, so it went.
+#
+# Current entries: none.
