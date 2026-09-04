@@ -2,13 +2,18 @@
 
 ## Supported versions
 
-scankit follows semantic versioning. Security fixes are applied to the latest minor
-release. Until 1.0, only the most recent tagged version is supported.
+scankit follows semantic versioning. The rule, rather than a snapshot that goes stale at
+every minor: **security fixes land on the latest minor line, and only there.** Until 1.0,
+that means the most recent tagged version.
 
 | Version | Supported |
 |---------|-----------|
-| latest `0.1.x` | ✅ |
-| older | ❌ |
+| latest minor line (currently `0.2.x`) | ✅ |
+| any older line | ❌ |
+
+Upgrading to the latest tag is the fix; there are no backports below 1.0. That matters more
+than it sounds: 0.2.3 closed a bypass of the network denial 0.2.2 had announced, so anyone
+still on 0.2.2 holds a protection that does not hold.
 
 ## Reporting a vulnerability
 
