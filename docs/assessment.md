@@ -75,5 +75,19 @@ not-satisfied objective, and the `Run` provenance is stamped into the metadata p
 are derived from content (no randomness) and timestamps come from `Run.Timestamp`, so the same
 assessment always yields the same document.
 
+Product specifics travel with it. `Result.Labels` become one namespaced prop per label on the
+observation, with the label key in `class` (never in `name`, so a product label cannot shadow
+`status`, `severity` or `observed`), sorted by key. `Evidence.Proves` becomes a
+`relevant-evidence` entry: a sentence stating what a pass establishes, plus
+`proves-running`, `proves-persistent` and `proves-reboot-survivable` props. That is the
+distinction between a control proven at runtime and one proven only in a config file, which is
+the point of collecting it.
+
+Labels, framework ids and observed values are caller data, and OSCAL is strict about both:
+prop `name`/`class` must be XML NCNames, and a value must be non-empty and single-line. The
+renderer coerces what it can (a key like `3 numeric start` becomes `_3-numeric-start`, a
+multi-line value is folded onto one line) and drops what it cannot, so the document validates
+against the NIST 1.1.2 schema whatever the product puts in the model.
+
 The grade (A–E), remediation taxonomy and product verdict stay in the product; `assessment`
 is the shared, auditor-facing shape they all serialize to.
