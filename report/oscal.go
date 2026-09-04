@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"io"
 	"sort"
+	"strings"
+	"unicode"
 
 	"github.com/stephrobert/scankit/assessment"
 )
@@ -41,12 +43,13 @@ func OSCAL(w io.Writer, a assessment.Assessment) error {
 	for _, r := range results {
 		obsUUID := uuidFrom("obs", r.Control, r.Subject, string(r.Status))
 		observations = append(observations, oscalObservation{
-			UUID:        obsUUID,
-			Title:       r.Control,
-			Description: observationDesc(r),
-			Methods:     []string{observationMethod(r)},
-			Collected:   ts,
-			Props:       evidenceProps(r),
+			UUID:             obsUUID,
+			Title:            r.Control,
+			Description:      observationDesc(r),
+			Methods:          []string{observationMethod(r)},
+			Collected:        ts,
+			Props:            evidenceProps(r),
+			RelevantEvidence: relevantEvidence(r.Evidence),
 		})
 
 		// Controls actually reviewed (evaluated): pass/fail/not-applicable. Not-evaluated is
@@ -66,7 +69,7 @@ func OSCAL(w io.Writer, a assessment.Assessment) error {
 					TargetID: r.Control,
 					Status:   oscalObjStatus{State: objectiveState(r.Status), Reason: string(r.Status)},
 				},
-				Props:               append(refProps(r.References), statusProp(r.Status)),
+				Props:               append(refProps(r.References), statusProps(r.Status)...),
 				RelatedObservations: []oscalRelObs{{ObservationUUID: obsUUID}},
 			})
 		}
@@ -144,11 +147,57 @@ func objectiveState(s assessment.Status) string {
 	return "not-satisfied"
 }
 
+// prop builds a namespaced property, or reports false when OSCAL would reject it. Both
+// guards matter because names and values come from caller data: `name`/`class` must be XML
+// NCNames and `value` a non-empty single-line string, so an unchecked label would publish a
+// document no OSCAL consumer can validate — the one failure mode this export cannot recover
+// from downstream.
+func prop(name, class, value string) (oscalProp, bool) {
+	n, v := ncName(name), propValue(value)
+	if n == "" || v == "" {
+		return oscalProp{}, false
+	}
+	return oscalProp{Name: n, Value: v, NS: oscalNS, Class: ncName(class)}, true
+}
+
+// ncName coerces s into an XML NCName (OSCAL's TokenDatatype): a letter or underscore, then
+// letters, digits, '.', '-' or '_'. Anything else becomes '-'; a leading digit or punctuation
+// gets an underscore in front. Returns "" for a string with nothing usable in it.
+func ncName(s string) string {
+	var b strings.Builder
+	for _, r := range s {
+		switch {
+		case unicode.IsLetter(r) || r == '_':
+			b.WriteRune(r)
+		case unicode.IsDigit(r) || r == '.' || r == '-':
+			if b.Len() == 0 {
+				b.WriteByte('_')
+			}
+			b.WriteRune(r)
+		default:
+			if b.Len() == 0 {
+				b.WriteByte('_')
+			} else {
+				b.WriteByte('-')
+			}
+		}
+	}
+	return b.String()
+}
+
+// propValue coerces s into OSCAL's StringDatatype: non-empty, no leading/trailing whitespace,
+// and single-line (the schema's pattern does not match a newline). Line breaks become spaces
+// rather than truncating the value: an auditor still reads what was observed.
+func propValue(s string) string {
+	s = strings.Join(strings.Fields(s), " ")
+	return s
+}
+
 func runProps(run assessment.Run) []oscalProp {
 	p := []oscalProp{}
 	add := func(name, val string) {
-		if val != "" {
-			p = append(p, oscalProp{Name: name, Value: val, NS: oscalNS})
+		if q, ok := prop(name, "", val); ok {
+			p = append(p, q)
 		}
 	}
 	add("tool-name", run.Tool.Name)
@@ -163,22 +212,23 @@ func runProps(run assessment.Run) []oscalProp {
 	add("target-platform", run.Target.Platform)
 	add("source", run.Source)
 	for _, in := range run.Scope.Included {
-		p = append(p, oscalProp{Name: "scope-included", Value: in, NS: oscalNS})
+		add("scope-included", in)
 	}
 	for _, ex := range run.Scope.Excluded {
-		p = append(p, oscalProp{Name: "scope-excluded", Value: ex, NS: oscalNS})
+		add("scope-excluded", ex)
 	}
 	add("scope-note", run.Scope.Note)
 	return p
 }
 
 func evidenceProps(r assessment.Result) []oscalProp {
-	p := []oscalProp{{Name: "status", Value: string(r.Status), NS: oscalNS}}
+	p := []oscalProp{}
 	add := func(name, val string) {
-		if val != "" {
-			p = append(p, oscalProp{Name: name, Value: val, NS: oscalNS})
+		if q, ok := prop(name, "", val); ok {
+			p = append(p, q)
 		}
 	}
+	add("status", string(r.Status))
 	add("severity", r.Severity)
 	add("subject", r.Subject)
 	add("attribute", r.Evidence.Attribute)
@@ -190,7 +240,64 @@ func evidenceProps(r assessment.Result) []oscalProp {
 		add("waiver-justification", r.Waiver.Justification)
 		add("waiver-until", r.Waiver.Until)
 	}
+	return append(p, labelProps(r.Labels)...)
+}
+
+// labelProps carries Result.Labels — the product specifics a consumer fills (domain,
+// remediation class, standard level…) — into the document instead of dropping them. The label
+// key goes in `class`, not `name`, so a product label can never shadow a prop this package
+// defines (status, severity, observed…). Sorted by key: the export is byte-reproducible.
+func labelProps(labels map[string]string) []oscalProp {
+	if len(labels) == 0 {
+		return nil
+	}
+	keys := make([]string, 0, len(labels))
+	for k := range labels {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	p := make([]oscalProp, 0, len(keys))
+	for _, k := range keys {
+		if q, ok := prop("label", k, labels[k]); ok && q.Class != "" {
+			p = append(p, q)
+		}
+	}
 	return p
+}
+
+// provesDimensions names what Evidence.Proves stores, in its order.
+var provesDimensions = [3]string{"running", "persistent", "reboot-survivable"}
+
+// relevantEvidence renders Evidence.Proves as an OSCAL relevant-evidence entry: the
+// description states in words what a pass establishes, and one prop per dimension carries it
+// in machine form. This is the distinction an auditor cannot otherwise make — a control
+// proven at runtime versus one proven only in a config file — so it belongs in the evidence
+// structure rather than lost among the observation's flat props.
+//
+// Emitted only when at least one dimension is filled: the schema requires a non-empty
+// description and rejects an empty relevant-evidence array.
+func relevantEvidence(e assessment.Evidence) []oscalRelEvidence {
+	props := make([]oscalProp, 0, len(provesDimensions))
+	stated := make([]string, 0, len(provesDimensions))
+	for i, dim := range provesDimensions {
+		q, ok := prop("proves-"+dim, "", e.Proves[i])
+		if !ok {
+			continue
+		}
+		props = append(props, q)
+		stated = append(stated, dim+"="+q.Value)
+	}
+	if len(props) == 0 {
+		return nil
+	}
+	desc := "A pass proves " + strings.Join(stated, ", ")
+	if src := propValue(e.Source); src != "" {
+		desc += "; collected from " + src
+	}
+	if typ := propValue(e.Type); typ != "" {
+		desc += "; evidence type " + typ
+	}
+	return []oscalRelEvidence{{Description: desc + ".", Props: props}}
 }
 
 func refProps(refs []assessment.Reference) []oscalProp {
@@ -200,13 +307,21 @@ func refProps(refs []assessment.Reference) []oscalProp {
 		if ref.Version != "" {
 			val += " (" + ref.Version + ")"
 		}
-		p = append(p, oscalProp{Name: "reference", Value: val, NS: oscalNS, Class: ref.Framework})
+		if q, ok := prop("reference", ref.Framework, val); ok {
+			p = append(p, q)
+		}
 	}
 	return p
 }
 
-func statusProp(s assessment.Status) oscalProp {
-	return oscalProp{Name: "status", Value: string(s), NS: oscalNS}
+// statusProps returns the status property, or nothing when the status is empty — a caller can
+// leave it unset, and a prop with an empty name and value is a document an OSCAL consumer
+// rejects outright.
+func statusProps(s assessment.Status) []oscalProp {
+	if q, ok := prop("status", "", string(s)); ok {
+		return []oscalProp{q}
+	}
+	return nil
 }
 
 func nonEmpty(v, def string) string {
@@ -285,11 +400,17 @@ type oscalControlID struct {
 }
 
 type oscalObservation struct {
-	UUID        string      `json:"uuid"`
-	Title       string      `json:"title,omitempty"`
+	UUID             string             `json:"uuid"`
+	Title            string             `json:"title,omitempty"`
+	Description      string             `json:"description"`
+	Methods          []string           `json:"methods"`
+	Collected        string             `json:"collected,omitempty"`
+	Props            []oscalProp        `json:"props,omitempty"`
+	RelevantEvidence []oscalRelEvidence `json:"relevant-evidence,omitempty"`
+}
+
+type oscalRelEvidence struct {
 	Description string      `json:"description"`
-	Methods     []string    `json:"methods"`
-	Collected   string      `json:"collected,omitempty"`
 	Props       []oscalProp `json:"props,omitempty"`
 }
 

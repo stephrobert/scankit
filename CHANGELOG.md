@@ -6,6 +6,29 @@ All notable changes to scankit are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+- **`report.OSCAL` now carries `Result.Labels` and `Evidence.Proves`.** Both are filled by the
+  consuming product (pavois populates `domain`, `remediation_class`, `ssg`, the per-standard
+  level, and its running / persistent / reboot-survivable triple) and both were silently
+  dropped by the export, so an auditor reading the OSCAL document could not tell a control
+  proven at runtime from one proven only in a config file.
+
+  Labels become one namespaced prop per label on the observation, with the label key in
+  `class` — not in `name`, so a product label can never shadow `status`, `severity` or
+  `observed` — sorted by key to keep the document byte-reproducible. `Proves` becomes a
+  `relevant-evidence` entry: a sentence stating what a pass establishes plus one prop per
+  dimension (`proves-running`, `proves-persistent`, `proves-reboot-survivable`). Additive
+  only: every prop emitted before is emitted unchanged.
+
+### Fixed
+- **The OSCAL export could emit a document that fails schema validation**, on data a product
+  legitimately supplies: OSCAL requires prop `name`/`class` to be XML NCNames and values to be
+  non-empty and single-line. A framework id such as `cis v8 !`, or an observed value
+  containing a newline, produced an invalid document. Verified against the NIST 1.1.2 schema
+  with `check-jsonschema`: the previous renderer failed on three counts for such an
+  assessment, this one validates. Names and keys are coerced to NCNames, values folded onto
+  one line, and a prop with nothing usable left is dropped rather than published.
+
 ## [0.2.3] - 2026-09-04
 
 ### Security
