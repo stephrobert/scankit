@@ -6,6 +6,8 @@ All notable changes to scankit are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-09-04
+
 ### Added
 - **`report.OSCAL` now carries `Result.Labels` and `Evidence.Proves`.** Both are filled by the
   consuming product (pavois populates `domain`, `remediation_class`, `ssg`, the per-standard
@@ -149,7 +151,8 @@ pitstop and pavois security scanners.
   (build/test/vet/govulncheck, CodeQL, OpenSSF Scorecard, dependency-review, Trivy,
   OSV-Scanner, TruffleHog, SBOM) and an SLSA-attested release workflow.
 
-[Unreleased]: https://github.com/stephrobert/scankit/compare/v0.2.3...HEAD
+[Unreleased]: https://github.com/stephrobert/scankit/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/stephrobert/scankit/releases/tag/v0.3.0
 [0.2.3]: https://github.com/stephrobert/scankit/releases/tag/v0.2.3
 [0.2.2]: https://github.com/stephrobert/scankit/releases/tag/v0.2.2
 [0.2.1]: https://github.com/stephrobert/scankit/releases/tag/v0.2.1

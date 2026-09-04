@@ -8,7 +8,7 @@ that means the most recent tagged version.
 
 | Version | Supported |
 |---------|-----------|
-| latest minor line (currently `0.2.x`) | ✅ |
+| latest minor line (currently `0.3.x`) | ✅ |
 | any older line | ❌ |
 
 Upgrading to the latest tag is the fix; there are no backports below 1.0. That matters more
