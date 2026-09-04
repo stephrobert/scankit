@@ -1,7 +1,9 @@
 name: Go
 
-# Quality gate for scankit: formatting, vet, build, race-tested units, fuzzing,
-# golangci-lint and govulncheck. Actions pinned by commit SHA; tools pinned by version.
+# Quality gate for scankit: formatting, vet, build, race-tested units, golangci-lint and
+# govulncheck. Mutation fuzzing runs nightly in fuzz.yml, not here — the seed corpora (every
+# past crasher) still replay in `go test` below, which is where the regression value is.
+# Actions pinned by commit SHA; tools pinned by version.
 
 on:
   push:
@@ -34,7 +36,29 @@ jobs:
           # version déjà présente sur le runner (1.26.5), qui ne satisfait plus
           # la directive `go` du module avec GOTOOLCHAIN=local.
           go-version-file: go.mod
-          cache-dependency-path: go.sum
+          # Cache handled below: setup-go keys on go.sum with no fallback, so the run that
+          # bumps a dependency — the one that compiles the most — always starts cold.
+          cache: false
+
+      - name: Resolve Go cache paths
+        id: gocache
+        run: |
+          echo "build=$(go env GOCACHE)" >> "$GITHUB_OUTPUT"
+          echo "mod=$(go env GOMODCACHE)" >> "$GITHUB_OUTPUT"
+
+      # Exact key on go.sum, then a prefix fallback: a dependency bump reuses the previous
+      # build cache instead of recompiling the graph from scratch (go verifies every module
+      # against go.sum regardless, so a stale restore cannot smuggle anything in).
+      - name: Cache Go builds and modules
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ${{ steps.gocache.outputs.build }}
+            ${{ steps.gocache.outputs.mod }}
+          key: go-${{ runner.os }}-${{ hashFiles('go.sum') }}-${{ github.sha }}
+          restore-keys: |
+            go-${{ runner.os }}-${{ hashFiles('go.sum') }}-
+            go-${{ runner.os }}-
 
       - name: gofmt
         run: |
@@ -49,18 +73,9 @@ jobs:
       - name: go build
         run: go build ./...
 
+      # Runs every committed fuzz seed, including past crashers, on top of the unit tests.
       - name: go test (race)
         run: go test -race ./...
-
-      # Fuzz the surface fed by input the consuming tool does not control: the (well-formed
-      # but arbitrary) scan input reaching the Rego engine, and the finding fields reaching
-      # the renderers. Seed corpora run on every `go test`; this step briefly mutates so a
-      # regression surfaces here rather than in a downstream product.
-      - name: go test (fuzz)
-        run: |
-          go test ./engine -run '^$' -fuzz '^FuzzEvaluate$' -fuzztime=45s
-          go test ./report -run '^$' -fuzz '^FuzzRenderers$' -fuzztime=45s
-          go test ./report -run '^$' -fuzz '^FuzzOSCAL$' -fuzztime=45s
 
       - name: golangci-lint
         run: |
