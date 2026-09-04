@@ -32,3 +32,9 @@ jobs:
           fail-on-severity: high
           # AGPL/GPL copyleft would force-relicense the Apache-2.0 project — deny by default.
           deny-licenses: GPL-2.0, GPL-3.0, AGPL-3.0
+          # Since v5 the action also evaluates GitHub Actions as dependencies. TruffleHog is
+          # AGPL-3.0 but is never linked into scankit: the CI runs it as a separate process
+          # over the repository's own contents, so its license does not reach a consumer of
+          # this module. Acquitted by package, not by turning the license rule off — a new
+          # AGPL Go module (or any other AGPL action) still fails this check.
+          allow-dependencies-licenses: pkg:githubactions/trufflesecurity/trufflehog
