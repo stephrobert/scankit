@@ -1,8 +1,26 @@
 name: OSV-Scanner
 
 # Scans Go dependencies for known vulnerabilities AND malicious packages (MAL-) via the OSV
-# database. PR runs only flag newly-introduced issues; scheduled/push runs catch packages
-# reclassified as malicious after the fact.
+# database, with call analysis on: an advisory in a package scankit never reaches is not a
+# finding, it is noise that teaches people to ignore the check.
+#
+# Why this no longer calls the google/osv-scanner-action reusable workflow: that workflow runs
+# inside a container image pinned to a Go older than this module's (v2.3.8 ships golang:1.26.2,
+# v2.5.1 ships 1.26.5; go.mod requires 1.26.6). With GOTOOLCHAIN=local, govulncheck cannot load
+# the module, so OSV silently loses reachability filtering and reports every advisory in the
+# dependency graph. That is what made the 2026-08-31 scheduled run red on GO-2026-6303 in
+# golang.org/x/crypto — a package scankit does not import — while govulncheck on the same tree
+# said "0 vulnerabilities". The image keeps trailing the module's toolchain, so the next
+# unreachable transitive advisory would reproduce it exactly. Running the scanner on a runner
+# with the module's own toolchain is what buys the filtering back: measured on a module that
+# requires a vulnerable golang.org/x/crypto without importing the affected packages,
+# `--no-call-analysis=go` reports 13 advisories and `--call-analysis=go` reports 0.
+#
+# And why no SARIF upload to Code Scanning: osv-scanner's SARIF output ignores call analysis.
+# Same module, same scan — 40 SARIF results with call analysis, 40 without, identical rule ids
+# — so uploading it would file exactly the alerts this workflow exists to stop filing. The
+# console table and the exit code do honour the filtering, and advisories that are real for a
+# consumer are still raised by Dependabot alerts.
 
 on:
   pull_request:
@@ -17,18 +35,53 @@ on:
 permissions: {}
 
 jobs:
-  scan-pr:
-    if: github.event_name == 'pull_request' || github.event_name == 'merge_group'
+  scan:
+    name: osv-scanner
+    runs-on: ubuntu-24.04
     permissions:
-      actions: read
-      security-events: write
       contents: read
-    uses: google/osv-scanner-action/.github/workflows/osv-scanner-reusable-pr.yml@9a498708959aeaef5ef730655706c5a1df1edbc2 # v2.3.8
+    steps:
+      - name: Harden runner
+        uses: step-security/harden-runner@bf7454d06d71f1098171f2acdf0cd4708d7b5920 # v2.20.0
+        with:
+          egress-policy: audit
+      - name: Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
 
-  scan-scheduled:
-    if: github.event_name == 'push' || github.event_name == 'schedule'
-    permissions:
-      actions: read
-      security-events: write
-      contents: read
-    uses: google/osv-scanner-action/.github/workflows/osv-scanner-reusable.yml@9a498708959aeaef5ef730655706c5a1df1edbc2 # v2.3.8
+      - name: Setup Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          # The whole point of this workflow: the module's own toolchain, so call analysis can
+          # actually load the packages.
+          go-version-file: go.mod
+          cache: false # cached below, with a fallback key
+
+      - name: Resolve Go cache paths
+        id: gocache
+        run: |
+          echo "build=$(go env GOCACHE)" >> "$GITHUB_OUTPUT"
+          echo "mod=$(go env GOMODCACHE)" >> "$GITHUB_OUTPUT"
+
+      - name: Cache Go builds and modules
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ${{ steps.gocache.outputs.build }}
+            ${{ steps.gocache.outputs.mod }}
+          key: osv-${{ runner.os }}-${{ hashFiles('go.sum') }}-${{ github.sha }}
+          restore-keys: |
+            osv-${{ runner.os }}-${{ hashFiles('go.sum') }}-
+            osv-${{ runner.os }}-
+
+      # Built from source, pinned by version, like golangci-lint and govulncheck: the module
+      # proxy's checksum database is the integrity guarantee, and the build cache above means
+      # it is compiled once per dependency set.
+      - name: Install OSV-Scanner
+        run: go install github.com/google/osv-scanner/v2/cmd/osv-scanner@v2.3.8
+
+      # Non-zero exit = at least one advisory survived call analysis, or the scan itself broke.
+      # Either way the job goes red, and the table says which.
+      - name: Scan
+        run: '"$(go env GOPATH)/bin/osv-scanner" scan source --call-analysis=go --format table ./'
