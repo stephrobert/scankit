@@ -6,6 +6,26 @@ All notable changes to scankit are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.3.3] - 2026-09-09
+
+### Added
+
+- **`Options.Inconclusive`: an empty finding list stops rendering as an all-clear when
+  nothing was inspected.** "Nothing found" and "nothing looked at" rendered identically
+  — a green tick, "No deviations found in the audited scope", and four severity counters
+  at zero. Three signals literally true and collectively misleading, often printed
+  directly above a verdict saying the opposite.
+
+  The failure mode is human, not machine: automation reads the exit code and behaves
+  correctly; it is the person skimming a terminal, or the screenshot pasted into a
+  ticket, who sees a tick and a row of zeros. With the flag set, the marker is neutral,
+  the line names the cause (`Labels.NothingMeasured`, translatable like the rest), and
+  the counters are omitted.
+
+  The concept is not one product's: every scanner distinguishes "found nothing" from
+  "inspected nothing". The default stays false, so a consumer that does not ask the
+  question sees no change.
+
 ## [0.3.2] - 2026-09-09
 
 ### Added

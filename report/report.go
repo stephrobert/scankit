@@ -83,6 +83,20 @@ type Options struct {
 	// détail. On garde top-3 + blocs détail + résumé. Défaut : table affichée
 	// (comportement inchangé pour pitstop/plumber).
 	HideTable bool
+	// Inconclusive : le run n'a mesuré RIEN. Une liste de findings vide ne veut alors
+	// pas dire « tout va bien », elle veut dire « on n'a pas regardé » — et les deux
+	// se rendaient à l'identique : une coche verte, « aucun écart », et quatre
+	// compteurs à zéro. Trois signaux littéralement vrais et collectivement
+	// trompeurs, au-dessus d'un verdict qui dit l'inverse.
+	//
+	// Le mode d'échec est HUMAIN, pas machine : une automatisation lit le code de
+	// sortie et se comporte correctement ; c'est la personne qui survole un terminal,
+	// ou la capture collée dans un ticket, qui voit une coche et une rangée de zéros.
+	//
+	// Le concept n'est pas propre à un produit : tout scanner distingue « rien
+	// trouvé » de « rien inspecté ». Le défaut, lui, reste à false — un consommateur
+	// qui ne se pose pas la question ne voit aucun changement.
+	Inconclusive bool
 	// Labels : l'OSSATURE du rapport — titres de section, en-têtes de table, ligne
 	// « aucun écart ». Vide, elle reste en anglais, donc rien ne bouge pour un
 	// consommateur qui ne s'en sert pas.
@@ -98,9 +112,13 @@ type Options struct {
 // Labels porte l'ossature traduisible du rapport terminal. Un champ vide retombe sur
 // son libellé anglais : un consommateur n'a à renseigner que ce qu'il traduit.
 type Labels struct {
-	Mode            string // en-tête : « Mode »
-	Source          string // en-tête : « Source »
-	NoDeviations    string // « No deviations found in the audited scope. »
+	Mode         string // en-tête : « Mode »
+	Source       string // en-tête : « Source »
+	NoDeviations string // « No deviations found in the audited scope. »
+	// NothingMeasured : ce qui remplace NoDeviations quand Inconclusive est vrai.
+	// Il doit NOMMER la cause, pas la taire : « aucun écart » et « rien de mesuré »
+	// se lisent pareil, et c'est précisément ce qu'il faut séparer.
+	NothingMeasured string
 	ImmediateAction string // titre du top-3 ; reçoit le NOMBRE en %d
 	TotalDeviations string // « Total deviations: »
 	Details         string // « Details: »
@@ -214,7 +232,15 @@ func Terminal(w io.Writer, opts Options, findings []finding.Finding, sum scoring
 	ew := &errWriter{w: w}
 	writeHeader(ew, opts)
 	if len(findings) == 0 {
-		ew.println("  " + stOK.Render("✓") + " " + stValue.Render(or(opts.Labels.NoDeviations, "No deviations found in the audited scope.")))
+		// Un marqueur NEUTRE quand rien n'a été mesuré : la coche verte est ce que
+		// l'œil retient, et elle disait le contraire du verdict placé dessous.
+		marque := stOK.Render("✓")
+		ligne := or(opts.Labels.NoDeviations, "No deviations found in the audited scope.")
+		if opts.Inconclusive {
+			marque = stMuted.Render("○")
+			ligne = or(opts.Labels.NothingMeasured, "Nothing could be measured: the evaluated scope is empty.")
+		}
+		ew.println("  " + marque + " " + stValue.Render(ligne))
 		ew.println()
 		writeSummary(ew, opts, sum)
 		return ew.err
@@ -369,9 +395,14 @@ func writeSummary(ew *errWriter, opts Options, sum scoring.Summary) {
 		ew.println(" " + stValue.Render(opts.SummaryHeadline))
 		ew.println()
 	}
-	counts := fmt.Sprintf("🔴 CRITICAL %d   🟠 HIGH %d   🟡 MEDIUM %d   🔵 LOW %d",
-		sum.Counts["critical"], sum.Counts["high"], sum.Counts["medium"], sum.Counts["low"])
-	ew.println(" " + counts)
+	// Les compteurs sont TUS quand rien n'a été mesuré : quatre zéros se lisent
+	// « rien à signaler », alors qu'ils ne disent que « rien n'a été compté ». Le
+	// verdict, lui, est déjà rendu au-dessus et dit la vraie raison.
+	if !opts.Inconclusive {
+		counts := fmt.Sprintf("🔴 CRITICAL %d   🟠 HIGH %d   🟡 MEDIUM %d   🔵 LOW %d",
+			sum.Counts["critical"], sum.Counts["high"], sum.Counts["medium"], sum.Counts["low"])
+		ew.println(" " + counts)
+	}
 	ew.println(bar)
 }
 
