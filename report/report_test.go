@@ -244,3 +244,64 @@ func TestNothingMeasuredDoesNotRenderAsAllClear(t *testing.T) {
 		t.Error("le libellé fourni n'est pas rendu")
 	}
 }
+
+// TestTwoControlsSharingACodeKeepTheirOwnTitleAndRemediation : mesuré sur un tenant
+// réel, deux contrôles rattachés à une même exigence voyaient leurs findings réunis
+// sous le titre et la remédiation du PREMIER. Un lecteur à qui l'on dit de révoquer
+// une clé root pour corriger une autorisation `Resource="*"` corrige la mauvaise
+// chose — et la remédiation est la ligne sur laquelle il agit.
+func TestTwoControlsSharingACodeKeepTheirOwnTitleAndRemediation(t *testing.T) {
+	findings := []finding.Finding{
+		{
+			Code: "CLD-IAM-1", Severity: "critical", Subject: "cle-root",
+			Title: "Clé d'accès rattachée au compte root", Message: "clé d'API rattachée au compte root",
+			Remediation: "Révoquer la clé root et créer une application IAM dédiée.",
+		},
+		{
+			Code: "CLD-IAM-1", Severity: "high", Subject: "ci-deployer",
+			Title: "Politique IAM portant Resource=\"*\"", Message: "autorisation Allow portant Resource=\"*\"",
+			Remediation: "Restreindre Resource aux seules ressources nécessaires.",
+		},
+	}
+	var b strings.Builder
+	if err := Terminal(&b, Options{}, findings, scoring.Summary{}); err != nil {
+		t.Fatalf("rendu : %v", err)
+	}
+	out := b.String()
+	for _, attendu := range []string{
+		"Clé d'accès rattachée au compte root",
+		"Révoquer la clé root",
+		"Politique IAM portant Resource=\"*\"",
+		"Restreindre Resource aux seules",
+	} {
+		if !strings.Contains(out, attendu) {
+			t.Errorf("le rendu ne contient pas %q :\n%s", attendu, out)
+		}
+	}
+	// Chaque bloc porte SA sévérité : les fondre en donnait une seule, celle du
+	// premier, et le tableau des contrôles agrégeait « Sév » et « # » sur une ligne
+	// qui recouvrait deux contrôles différents.
+	if n := strings.Count(out, "Total deviations:"); n != 2 {
+		t.Errorf("%d bloc(s) rendu(s), 2 attendus (un par contrôle) :\n%s", n, out)
+	}
+}
+
+// LE CONTRE-EXEMPLE : un contrôle UNIQUE sous un code ne se scinde pas. C'est le cas
+// courant, et le regroupement par exigence n'a de valeur que s'il tient encore.
+func TestOneControlUnderACodeStillRendersOneBlock(t *testing.T) {
+	findings := []finding.Finding{
+		{Code: "CLD-NET-1", Severity: "high", Subject: "sg-1", Title: "SSH ouvert à Internet", Message: "SSH accepté depuis Internet", Remediation: "Restreindre la source."},
+		{Code: "CLD-NET-1", Severity: "high", Subject: "sg-2", Title: "SSH ouvert à Internet", Message: "SSH accepté depuis Internet", Remediation: "Restreindre la source."},
+	}
+	var b strings.Builder
+	if err := Terminal(&b, Options{}, findings, scoring.Summary{}); err != nil {
+		t.Fatalf("rendu : %v", err)
+	}
+	out := b.String()
+	if n := strings.Count(out, "Total deviations:"); n != 1 {
+		t.Errorf("%d bloc(s), 1 attendu : deux findings d'un même contrôle restent ensemble\n%s", n, out)
+	}
+	if !strings.Contains(out, "sg-1") || !strings.Contains(out, "sg-2") {
+		t.Errorf("les deux sujets doivent rester listés :\n%s", out)
+	}
+}

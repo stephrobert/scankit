@@ -283,13 +283,30 @@ func titleOf(f finding.Finding) string {
 	return stripSubject(f.Message)
 }
 
+// groupKey — ce qu'un bloc AFFIRME de tous les findings qu'il réunit.
+//
+// Un bloc imprime un code, un titre et une remédiation, puis liste des findings
+// dessous. Il affirme donc que ces trois choses valent pour chacun d'eux. Grouper sur
+// le seul code le rendait faux dès que deux contrôles partagent une exigence : le
+// titre et la remédiation étaient ceux du PREMIER finding, et les autres se lisaient
+// sous un titre qui ne les décrit pas, au-dessus d'une remédiation qui ne les corrige
+// pas. Or la remédiation est précisément la ligne sur laquelle un lecteur agit.
+//
+// La clé est donc exactement ce que le bloc affirme. Deux findings qui ne partagent
+// pas les trois ne partagent pas un bloc — et le cas courant, un contrôle unique par
+// code, ne bouge pas d'un pixel.
+func groupKey(f finding.Finding) string {
+	return f.Code + "\x00" + titleOf(f) + "\x00" + f.Remediation
+}
+
 func groupByCode(findings []finding.Finding) ([]string, map[string]*codeGroup) {
 	by := map[string]*codeGroup{}
 	for _, f := range findings {
-		g, ok := by[f.Code]
+		k := groupKey(f)
+		g, ok := by[k]
 		if !ok {
 			g = &codeGroup{Code: f.Code, Severity: f.Severity, Title: titleOf(f)}
-			by[f.Code] = g
+			by[k] = g
 		}
 		g.Findings = append(g.Findings, f)
 	}
@@ -301,6 +318,12 @@ func groupByCode(findings []finding.Finding) ([]string, map[string]*codeGroup) {
 		si, sj := finding.SeverityRank(by[order[i]].Severity), finding.SeverityRank(by[order[j]].Severity)
 		if si != sj {
 			return si < sj
+		}
+		// À sévérité égale, le CODE d'abord : deux blocs d'une même exigence restent
+		// voisins, ce qui est la lisibilité que le regroupement par code apportait.
+		// La clé complète ensuite, pour que l'ordre soit total et déterministe.
+		if by[order[i]].Code != by[order[j]].Code {
+			return by[order[i]].Code < by[order[j]].Code
 		}
 		return order[i] < order[j]
 	})
