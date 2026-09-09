@@ -6,6 +6,22 @@ All notable changes to scankit are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.3.2] - 2026-09-09
+
+### Added
+
+- **`report.Options.Labels`: the terminal report's scaffolding is translatable.**
+  Section titles, table headers and the "no deviations" line were hard-coded English,
+  so a consumer able to translate the CONTENT still produced a half-translated
+  report — which reads as unfinished work rather than a choice, and undercuts the
+  content. Every field defaults to its English label when empty, so a consumer that
+  does not set it sees no change at all.
+
+  The labels are passed IN rather than held in a catalogue here: scankit has no
+  business knowing its consumers' languages, and a shared catalogue would force them
+  to agree on a vocabulary. The product knows what language it speaks; the renderer
+  does not.
+
 ## [0.3.1] - 2026-09-09
 
 ### Fixed

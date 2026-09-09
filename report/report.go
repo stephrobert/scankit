@@ -83,6 +83,42 @@ type Options struct {
 	// détail. On garde top-3 + blocs détail + résumé. Défaut : table affichée
 	// (comportement inchangé pour pitstop/plumber).
 	HideTable bool
+	// Labels : l'OSSATURE du rapport — titres de section, en-têtes de table, ligne
+	// « aucun écart ». Vide, elle reste en anglais, donc rien ne bouge pour un
+	// consommateur qui ne s'en sert pas.
+	//
+	// Pourquoi ici plutôt qu'un catalogue interne : scankit n'a pas à connaître les
+	// langues de ses consommateurs, et un catalogue partagé les obligerait à
+	// s'accorder sur un vocabulaire. Le produit sait dans quelle langue il parle ;
+	// le moteur de rendu, non. Un rapport dont le contenu est traduit et l'ossature
+	// non se lit comme une traduction inachevée, ce qui dessert le contenu.
+	Labels Labels
+}
+
+// Labels porte l'ossature traduisible du rapport terminal. Un champ vide retombe sur
+// son libellé anglais : un consommateur n'a à renseigner que ce qu'il traduit.
+type Labels struct {
+	Mode            string // en-tête : « Mode »
+	Source          string // en-tête : « Source »
+	NoDeviations    string // « No deviations found in the audited scope. »
+	ImmediateAction string // titre du top-3 ; reçoit le NOMBRE en %d
+	TotalDeviations string // « Total deviations: »
+	Details         string // « Details: »
+	Remediation     string // « Remediation »
+	Controls        string // titre de la table
+	ColCode         string // en-tête de colonne
+	ColControl      string
+	ColSeverity     string
+	ColTier         string
+	Summary         string // titre du résumé
+}
+
+// or rend le libellé fourni, ou son défaut anglais.
+func or(v, def string) string {
+	if v == "" {
+		return def
+	}
+	return v
 }
 
 func sevColor(sev string) lipgloss.Color {
@@ -178,12 +214,12 @@ func Terminal(w io.Writer, opts Options, findings []finding.Finding, sum scoring
 	ew := &errWriter{w: w}
 	writeHeader(ew, opts)
 	if len(findings) == 0 {
-		ew.println("  " + stOK.Render("✓") + " " + stValue.Render("No deviations found in the audited scope."))
+		ew.println("  " + stOK.Render("✓") + " " + stValue.Render(or(opts.Labels.NoDeviations, "No deviations found in the audited scope.")))
 		ew.println()
 		writeSummary(ew, opts, sum)
 		return ew.err
 	}
-	writeImmediateActions(ew, findings)
+	writeImmediateActions(ew, opts, findings)
 	order, byCode := groupByCode(findings)
 	for _, c := range order {
 		writeCodeGroup(ew, opts, byCode[c])
@@ -198,8 +234,8 @@ func Terminal(w io.Writer, opts Options, findings []finding.Finding, sum scoring
 func writeHeader(ew *errWriter, opts Options) {
 	bar := stRule.Render(strings.Repeat("─", hrWidth))
 	ew.println(bar)
-	ew.println(" " + stMuted.Render(fmt.Sprintf("%-8s", "Mode")) + "  " + stValue.Render(opts.Mode))
-	ew.println(" " + stMuted.Render(fmt.Sprintf("%-8s", "Source")) + "  " + stValue.Render(opts.Source))
+	ew.println(" " + stMuted.Render(fmt.Sprintf("%-8s", or(opts.Labels.Mode, "Mode"))) + "  " + stValue.Render(opts.Mode))
+	ew.println(" " + stMuted.Render(fmt.Sprintf("%-8s", or(opts.Labels.Source, "Source"))) + "  " + stValue.Render(opts.Source))
 	ew.println(bar)
 	ew.println()
 }
@@ -260,16 +296,16 @@ func writeCodeGroup(ew *errWriter, opts Options, g *codeGroup) {
 	ew.println(head)
 	ew.println(" " + stTitle.Render(truncate(g.Title, hrWidth-2)))
 	ew.println(bar)
-	ew.println("  " + stMuted.Render("Total deviations:") + " " + lipgloss.NewStyle().Foreground(sc).Bold(true).Render(fmt.Sprintf("%d", len(g.Findings))))
+	ew.println("  " + stMuted.Render(or(opts.Labels.TotalDeviations, "Total deviations:")) + " " + lipgloss.NewStyle().Foreground(sc).Bold(true).Render(fmt.Sprintf("%d", len(g.Findings))))
 	ew.println()
-	ew.println("  " + stMuted.Render("Details:"))
+	ew.println("  " + stMuted.Render(or(opts.Labels.Details, "Details:")))
 	for _, f := range g.Findings {
 		sev := lipgloss.NewStyle().Foreground(sevColor(f.Severity)).Bold(true).Render(shortSev(f.Severity))
 		ew.printf("      %s  %s — %s\n", sev, stValue.Render(f.Subject), stValue.Render(stripSubject(f.Message)))
 	}
 	if rem := g.Findings[0].Remediation; rem != "" {
 		ew.println()
-		ew.println("  " + stMuted.Render("Remediation"))
+		ew.println("  " + stMuted.Render(or(opts.Labels.Remediation, "Remediation")))
 		for _, l := range strings.Split(strings.TrimRight(rem, "\n"), "\n") {
 			ew.println("    " + stValue.Render(l))
 		}
@@ -284,8 +320,9 @@ func writeCodeGroup(ew *errWriter, opts Options, g *codeGroup) {
 
 func writeControlsTable(ew *errWriter, opts Options, order []string, byCode map[string]*codeGroup) {
 	ew.println()
-	ew.println("  " + stMuted.Render("Controls"))
-	headers := []string{"Code", "Control", "Sev", "Tier", "#"}
+	ew.println("  " + stMuted.Render(or(opts.Labels.Controls, "Controls")))
+	headers := []string{or(opts.Labels.ColCode, "Code"), or(opts.Labels.ColControl, "Control"),
+		or(opts.Labels.ColSeverity, "Sev"), or(opts.Labels.ColTier, "Tier"), "#"}
 	rows := make([][]string, 0, len(order))
 	for _, c := range order {
 		g := byCode[c]
@@ -300,7 +337,7 @@ func writeControlsTable(ew *errWriter, opts Options, order []string, byCode map[
 	writeBoxTable(ew, "  ", headers, rows, []bool{false, false, false, false, true})
 }
 
-func writeImmediateActions(ew *errWriter, findings []finding.Finding) {
+func writeImmediateActions(ew *errWriter, opts Options, findings []finding.Finding) {
 	sorted := make([]finding.Finding, len(findings))
 	copy(sorted, findings)
 	sort.SliceStable(sorted, func(i, j int) bool {
@@ -312,7 +349,7 @@ func writeImmediateActions(ew *errWriter, findings []finding.Finding) {
 	}
 	bar := stRule.Render(strings.Repeat("─", hrWidth))
 	ew.println(bar)
-	ew.println(" " + stTitle.Render(fmt.Sprintf("⚡ Immediate action — top %d most severe deviations", len(top))))
+	ew.println(" " + stTitle.Render(fmt.Sprintf(or(opts.Labels.ImmediateAction, "⚡ Immediate action — top %d most severe deviations"), len(top))))
 	ew.println(bar)
 	ew.println()
 	for i, f := range top {
@@ -326,7 +363,7 @@ func writeImmediateActions(ew *errWriter, findings []finding.Finding) {
 func writeSummary(ew *errWriter, opts Options, sum scoring.Summary) {
 	bar := stRule.Render(strings.Repeat("─", hrWidth))
 	ew.println(bar)
-	ew.println(" " + lipgloss.NewStyle().Foreground(opts.Brand).Bold(true).Render("Summary"))
+	ew.println(" " + lipgloss.NewStyle().Foreground(opts.Brand).Bold(true).Render(or(opts.Labels.Summary, "Summary")))
 	ew.println()
 	if opts.SummaryHeadline != "" {
 		ew.println(" " + stValue.Render(opts.SummaryHeadline))
