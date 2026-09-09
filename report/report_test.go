@@ -139,3 +139,56 @@ func FuzzRenderers(f *testing.F) {
 		}
 	})
 }
+
+// TestLabelsTranslateTheScaffoldingAndDefaultToEnglish : l'ossature du rapport —
+// titres de section, en-têtes de table, ligne « aucun écart » — était en dur.
+//
+// Un consommateur qui traduit le CONTENU sans pouvoir traduire l'ossature produit un
+// rapport à moitié traduit, ce qui dessert le contenu : il se lit comme un travail
+// inachevé plutôt que comme un choix.
+//
+// Les deux sens comptent. Un champ vide doit retomber sur l'anglais, sans quoi ce
+// changement casserait tout consommateur qui ne s'en sert pas.
+func TestLabelsTranslateTheScaffoldingAndDefaultToEnglish(t *testing.T) {
+	fs := []finding.Finding{{
+		Code: "bucket_public", Severity: "high", Subject: "backups",
+		Message: "bucket ouvert", Remediation: "fermer le bucket",
+	}}
+
+	var nu bytes.Buffer
+	if err := Terminal(&nu, Options{ToolName: "essai"}, fs, scoring.Summarize(fs)); err != nil {
+		t.Fatalf("rendu : %v", err)
+	}
+	for _, want := range []string{"Immediate action", "Total deviations:", "Details:",
+		"Remediation", "Controls", "Summary"} {
+		if !strings.Contains(nu.String(), want) {
+			t.Errorf("sans Labels, l'ossature anglaise a bougé : %q absent", want)
+		}
+	}
+
+	var fr bytes.Buffer
+	labels := Labels{
+		Mode: "Mode", Source: "Source",
+		NoDeviations:    "Aucun écart sur le périmètre audité.",
+		ImmediateAction: "⚡ Action immédiate — les %d écarts les plus graves",
+		TotalDeviations: "Écarts au total :", Details: "Détail :",
+		Remediation: "Remédiation", Controls: "Contrôles",
+		ColCode: "Code", ColControl: "Contrôle", ColSeverity: "Sév", ColTier: "Palier",
+		Summary: "Synthèse",
+	}
+	if err := Terminal(&fr, Options{ToolName: "essai", Labels: labels}, fs, scoring.Summarize(fs)); err != nil {
+		t.Fatalf("rendu : %v", err)
+	}
+	for _, absent := range []string{"Immediate action", "Total deviations:", "Details:",
+		"Controls", "Summary"} {
+		if strings.Contains(fr.String(), absent) {
+			t.Errorf("avec Labels, l'ossature anglaise subsiste : %q présent", absent)
+		}
+	}
+	for _, want := range []string{"Action immédiate", "Écarts au total :", "Détail :",
+		"Contrôles", "Synthèse"} {
+		if !strings.Contains(fr.String(), want) {
+			t.Errorf("le libellé fourni n'est pas rendu : %q absent", want)
+		}
+	}
+}
