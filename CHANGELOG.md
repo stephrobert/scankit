@@ -6,6 +6,8 @@ All notable changes to scankit are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.3.5] - 2026-09-09
+
 ### Fixed
 
 - **One subject with several causes rendered as several deviations.** Different `deny`
