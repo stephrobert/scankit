@@ -192,3 +192,55 @@ func TestLabelsTranslateTheScaffoldingAndDefaultToEnglish(t *testing.T) {
 		}
 	}
 }
+
+// TestNothingMeasuredDoesNotRenderAsAllClear : « rien trouvé » et « rien inspecté » se
+// rendaient à l'identique — une coche verte, « aucun écart », quatre compteurs à zéro.
+//
+// Trois signaux littéralement vrais et collectivement trompeurs. Le mode d'échec est
+// HUMAIN : une automatisation lit le code de sortie et se comporte bien ; c'est la
+// personne qui survole un terminal, ou la capture collée dans un ticket, qui voit une
+// coche et une rangée de zéros.
+//
+// Les deux sens sont éprouvés : le défaut ne bouge pas, sans quoi ce changement
+// modifierait le rendu de tout consommateur qui ne se pose pas la question.
+func TestNothingMeasuredDoesNotRenderAsAllClear(t *testing.T) {
+	var clair bytes.Buffer
+	if err := Terminal(&clair, Options{ToolName: "essai"}, nil, scoring.Summarize(nil)); err != nil {
+		t.Fatalf("rendu : %v", err)
+	}
+	for _, want := range []string{"✓", "No deviations found", "CRITICAL"} {
+		if !strings.Contains(clair.String(), want) {
+			t.Errorf("le cas CONFORME a bougé : %q absent", want)
+		}
+	}
+
+	var vide bytes.Buffer
+	o := Options{ToolName: "essai", Inconclusive: true}
+	if err := Terminal(&vide, o, nil, scoring.Summarize(nil)); err != nil {
+		t.Fatalf("rendu : %v", err)
+	}
+	if strings.Contains(vide.String(), "✓") {
+		t.Error("la coche verte subsiste alors que rien n'a été mesuré : c'est ce que l'œil retient")
+	}
+	if strings.Contains(vide.String(), "No deviations found") {
+		t.Error("« aucun écart » subsiste alors que rien n'a été regardé")
+	}
+	// Quatre zéros se lisent « rien à signaler », alors qu'ils ne disent que « rien
+	// n'a été compté ».
+	if strings.Contains(vide.String(), "CRITICAL") {
+		t.Error("les compteurs de sévérité subsistent : quatre zéros se lisent comme un feu vert")
+	}
+	if !strings.Contains(vide.String(), "Nothing could be measured") {
+		t.Error("le rendu ne nomme pas la cause")
+	}
+
+	// Le libellé reste traduisible, comme le reste de l'ossature.
+	var fr bytes.Buffer
+	o.Labels = Labels{NothingMeasured: "Aucun contrôle n'a pu être mesuré."}
+	if err := Terminal(&fr, o, nil, scoring.Summarize(nil)); err != nil {
+		t.Fatalf("rendu : %v", err)
+	}
+	if !strings.Contains(fr.String(), "Aucun contrôle n'a pu être mesuré.") {
+		t.Error("le libellé fourni n'est pas rendu")
+	}
+}
