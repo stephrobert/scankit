@@ -6,6 +6,8 @@ All notable changes to scankit are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.3.4] - 2026-09-09
+
 ### Fixed
 
 - **A terminal block printed one control's title and remediation over another
