@@ -6,6 +6,23 @@ All notable changes to scankit are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.3.1] - 2026-09-09
+
+### Fixed
+
+- **`Evidence.proves` was emitted as `["","",""]` on every result.** `omitempty` on a
+  fixed-size array is, and always was, a no-op: `encoding/json` applies it to nil
+  slices and maps, zero numbers, empty strings, false and nil pointers, never to an
+  array. A zero `[3]string` therefore serialised as three blanks in the JSON output,
+  in sealed evidence bundles, and in anything built on top of them — so a consumer
+  could not tell "no proof was recorded" from "three proofs were recorded and all are
+  blank". The two mean very different things for a model whose contract is that a
+  status is backed by what was actually observed. `Evidence` now marshals through its
+  own method, which omits the field when nothing was recorded. **The type is
+  unchanged**: the three positions ARE the meaning (`report.provesDimensions` indexes
+  them by name), a scanner filling only the first stays distinguishable from one
+  filling none, and no caller writing `Proves: [3]string{…}` breaks.
+
 ## [0.3.0] - 2026-09-04
 
 ### Added
