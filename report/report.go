@@ -6,6 +6,7 @@ package report
 import (
 	"fmt"
 	"io"
+	"slices"
 	"sort"
 	"strings"
 
@@ -348,9 +349,16 @@ func writeCodeGroup(ew *errWriter, opts Options, g *codeGroup) {
 	ew.println("  " + stMuted.Render(or(opts.Labels.TotalDeviations, "Total deviations:")) + " " + lipgloss.NewStyle().Foreground(sc).Bold(true).Render(fmt.Sprintf("%d", len(g.Findings))))
 	ew.println()
 	ew.println("  " + stMuted.Render(or(opts.Labels.Details, "Details:")))
-	for _, f := range g.Findings {
-		sev := lipgloss.NewStyle().Foreground(sevColor(f.Severity)).Bold(true).Render(shortSev(f.Severity))
-		ew.printf("      %s  %s — %s\n", sev, stValue.Render(f.Subject), stValue.Render(stripSubject(f.Message)))
+	for _, e := range bySubject(g.Findings) {
+		sev := lipgloss.NewStyle().Foreground(sevColor(e.severity)).Bold(true).Render(shortSev(e.severity))
+		ew.printf("      %s  %s — %s\n", sev, stValue.Render(e.subject), stValue.Render(e.causes[0]))
+		// Les causes SUIVANTES sont indentées sous la première : un même sujet, un
+		// même problème, plusieurs chemins par lesquels il est vrai. Les lister à
+		// plat donnait autant d'écarts que de chemins, et faisait paraître le
+		// rapport plus gros que le problème.
+		for _, c := range e.causes[1:] {
+			ew.printf("            %s %s\n", stMuted.Render("·"), stValue.Render(c))
+		}
 	}
 	if rem := g.Findings[0].Remediation; rem != "" {
 		ew.println()
@@ -387,8 +395,20 @@ func writeControlsTable(ew *errWriter, opts Options, order []string, byCode map[
 }
 
 func writeImmediateActions(ew *errWriter, opts Options, findings []finding.Finding) {
-	sorted := make([]finding.Finding, len(findings))
-	copy(sorted, findings)
+	// DÉDUPLIQUÉ par (code, sujet) avant le tri. Le panneau annonce « les trois écarts
+	// les plus graves » ; un bucket public par trois voies en occupait les trois
+	// places, et il montrait donc trois fois le même écart au lieu des trois plus
+	// graves. Ce qu'il promet et ce qu'il rendait ne coïncidaient pas.
+	vus := map[string]bool{}
+	sorted := make([]finding.Finding, 0, len(findings))
+	for _, f := range findings {
+		cle := f.Code + "\x00" + f.Subject
+		if vus[cle] {
+			continue
+		}
+		vus[cle] = true
+		sorted = append(sorted, f)
+	}
 	sort.SliceStable(sorted, func(i, j int) bool {
 		return finding.SeverityRank(sorted[i].Severity) < finding.SeverityRank(sorted[j].Severity)
 	})
@@ -481,4 +501,54 @@ func writeBoxTable(ew *errWriter, indent string, headers []string, rows [][]stri
 		ew.println(row(r))
 	}
 	ew.println(line("╰", "┴", "╯", "─"))
+}
+
+// entreeSujet — un SUJET dans un bloc, et les causes pour lesquelles il y figure.
+type entreeSujet struct {
+	subject  string
+	severity string
+	causes   []string
+}
+
+// bySubject regroupe les findings d'un bloc par sujet, en préservant l'ordre
+// d'apparition et en dédupliquant les causes identiques.
+//
+// Ce que ça corrige : plusieurs blocs `deny` d'une même règle peuvent conclure sur le
+// même sujet par des chemins différents — une ACL prédéfinie, un grant, une politique
+// de bucket. Chacun est une cause RÉELLE, donc rien n'est un faux positif ; mais un
+// bucket public reste UN problème, et l'afficher trois fois fait paraître le rapport
+// plus gros que ce qu'il mesure. Le bruit coûte à la confiance ce que coûte un faux
+// positif.
+//
+// On agrège l'AFFICHAGE, jamais la mesure : le nombre d'écarts du bloc, les formats
+// analysables et le décompte de sévérité continuent de porter chaque cause
+// séparément. Un consommateur qui corrige l'ACL et laisse la politique doit continuer
+// de voir la seconde.
+//
+// La sévérité retenue est la PLUS FORTE des causes : rétrograder un sujet parce
+// qu'une de ses causes est plus douce serait exactement le silence que ce paquet
+// refuse.
+func bySubject(findings []finding.Finding) []entreeSujet {
+	ordre := make([]string, 0, len(findings))
+	par := map[string]*entreeSujet{}
+	for _, f := range findings {
+		e, ok := par[f.Subject]
+		if !ok {
+			e = &entreeSujet{subject: f.Subject, severity: f.Severity}
+			par[f.Subject] = e
+			ordre = append(ordre, f.Subject)
+		}
+		if finding.SeverityRank(f.Severity) < finding.SeverityRank(e.severity) {
+			e.severity = f.Severity
+		}
+		cause := stripSubject(f.Message)
+		if !slices.Contains(e.causes, cause) {
+			e.causes = append(e.causes, cause)
+		}
+	}
+	out := make([]entreeSujet, 0, len(ordre))
+	for _, s := range ordre {
+		out = append(out, *par[s])
+	}
+	return out
 }

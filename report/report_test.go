@@ -305,3 +305,78 @@ func TestOneControlUnderACodeStillRendersOneBlock(t *testing.T) {
 		t.Errorf("les deux sujets doivent rester listés :\n%s", out)
 	}
 }
+
+// TestOneSubjectWithSeveralCausesIsOneLine : plusieurs blocs `deny` d'une même règle
+// concluent sur le MÊME sujet par des chemins différents — une ACL prédéfinie, un
+// grant, une politique de bucket. Chaque cause est réelle, donc aucune n'est un faux
+// positif ; mais un bucket public reste UN problème, et l'afficher trois fois fait
+// paraître le rapport plus gros que ce qu'il mesure.
+func TestOneSubjectWithSeveralCausesIsOneLine(t *testing.T) {
+	f := func(msg string) finding.Finding {
+		return finding.Finding{
+			Code: "CLD-STO-1", Severity: "critical", Subject: "backups",
+			Title: "Stockage objet exposé publiquement", Message: msg,
+			Remediation: "Rendre le bucket privé.",
+		}
+	}
+	findings := []finding.Finding{
+		f("Bucket « backups » : ACL publique"),
+		f("Bucket « backups » : grant AllUsers"),
+		f("Bucket « backups » : politique de bucket publique"),
+	}
+	var b strings.Builder
+	if err := Terminal(&b, Options{}, findings, scoring.Summary{}); err != nil {
+		t.Fatalf("rendu : %v", err)
+	}
+	out := b.String()
+
+	// UNE ligne de sujet, pas trois : le sujet ne se répète pas en tête de détail.
+	if n := strings.Count(out, "  backups — "); n != 1 {
+		t.Errorf("%d ligne(s) de sujet, 1 attendue :\n%s", n, out)
+	}
+	// Mais AUCUNE cause ne disparaît : agréger l'affichage, jamais la mesure.
+	for _, cause := range []string{"ACL publique", "grant AllUsers", "politique de bucket publique"} {
+		if !strings.Contains(out, cause) {
+			t.Errorf("la cause %q a disparu du rapport :\n%s", cause, out)
+		}
+	}
+	// Le décompte du bloc continue de porter les trois : ce que le rapport MESURE
+	// n'a pas changé, seule sa mise en forme.
+	if !strings.Contains(out, "3") {
+		t.Errorf("le décompte du bloc ne porte plus les trois causes :\n%s", out)
+	}
+}
+
+// TestTheImmediateActionsPanelShowsDistinctDeviations : le panneau annonce « les trois
+// écarts les plus graves ». Un sujet fautif par trois voies en occupait les trois
+// places, et montrait donc trois fois le même écart au lieu des trois plus graves.
+func TestTheImmediateActionsPanelShowsDistinctDeviations(t *testing.T) {
+	bucket := func(msg string) finding.Finding {
+		return finding.Finding{Code: "CLD-STO-1", Severity: "critical", Subject: "backups",
+			Title: "Stockage objet exposé publiquement", Message: msg, Remediation: "Rendre le bucket privé."}
+	}
+	findings := []finding.Finding{
+		bucket("Bucket « backups » : ACL publique"),
+		bucket("Bucket « backups » : grant AllUsers"),
+		bucket("Bucket « backups » : politique de bucket publique"),
+		{Code: "CLD-NET-1", Severity: "high", Subject: "sg-1", Title: "SSH ouvert", Message: "SSH ouvert à Internet", Remediation: "Restreindre."},
+		{Code: "CLD-IAM-1", Severity: "high", Subject: "ci-admin", Title: "Action joker", Message: "Action=*", Remediation: "Restreindre."},
+	}
+	var b strings.Builder
+	if err := Terminal(&b, Options{}, findings, scoring.Summary{}); err != nil {
+		t.Fatalf("rendu : %v", err)
+	}
+	// Le panneau est en TÊTE : on n'inspecte que lui, avant le premier bloc.
+	panneau := b.String()
+	if i := strings.Index(panneau, "Total deviations:"); i > 0 {
+		panneau = panneau[:i]
+	}
+	for _, sujet := range []string{"backups", "sg-1", "ci-admin"} {
+		if !strings.Contains(panneau, sujet) {
+			t.Errorf("le panneau ne montre pas %q — il est occupé par des doublons :\n%s", sujet, panneau)
+		}
+	}
+	if n := strings.Count(panneau, "backups"); n != 1 {
+		t.Errorf("%q apparaît %d fois dans le panneau, 1 attendue", "backups", n)
+	}
+}

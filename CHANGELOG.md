@@ -6,6 +6,22 @@ All notable changes to scankit are documented here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- **One subject with several causes rendered as several deviations.** Different `deny`
+  blocks of one rule can conclude on the same subject by different routes — a canned
+  ACL, a grant, a bucket policy. Each cause is real, so none is a false positive; but a
+  public bucket is *one* problem, and printing it three times makes the report look
+  bigger than what it measures. Noise costs confidence what a false positive costs. The
+  block now prints one line per subject with its causes listed beneath, and the
+  aggregation is of the **display only**: the block's count, the parsable formats and
+  the severity tally still carry every cause separately, so someone who fixes the ACL
+  and leaves the policy still sees the second one.
+- **The "immediate action" panel showed the same deviation three times.** It announces
+  the three most severe deviations, and a subject at fault by three routes took all
+  three slots. It now deduplicates by (code, subject) before ranking, so it shows what
+  it promises.
+
 ## [0.3.4] - 2026-09-09
 
 ### Fixed
