@@ -1,6 +1,7 @@
 package assessment
 
 import (
+	"encoding/json"
 	"testing"
 
 	"github.com/stephrobert/scankit/finding"
@@ -88,5 +89,75 @@ func TestConformant(t *testing.T) {
 	clean := []Result{{Control: "a", Status: Pass}, {Control: "b", Status: NotApplicable}}
 	if !(Assessment{Results: clean}).Conformant() {
 		t.Error("assessment with no Fail must be conformant")
+	}
+}
+
+// TestEmptyProvesIsOmittedNotBlank — `omitempty` on a fixed-size array is a no-op, and
+// that no-op reached every consumer.
+//
+// A zero [3]string serialised as ["","",""] on every result, so a reader could not
+// tell "no proof recorded" from "three proofs recorded, all blank". The two mean very
+// different things for a model whose contract is that a status is backed by what was
+// actually observed, and the blanks travelled into sealed evidence bundles where a
+// later reader has no way to interpret them.
+//
+// Both directions are asserted: absent when nothing was recorded, present and intact
+// when something was — including a partially filled array, whose empty positions carry
+// meaning of their own.
+func TestEmptyProvesIsOmittedNotBlank(t *testing.T) {
+	cases := []struct {
+		name string
+		ev   Evidence
+		want string
+	}{
+		{
+			name: "nothing recorded: the field is absent",
+			ev:   Evidence{Observed: "acl grants READ to AllUsers"},
+			want: `{"observed":"acl grants READ to AllUsers"}`,
+		},
+		{
+			name: "fully recorded: kept verbatim",
+			ev:   Evidence{Proves: [3]string{"yes", "yes", "unknown"}},
+			want: `{"proves":["yes","yes","unknown"]}`,
+		},
+		{
+			// The positions ARE the meaning: a scanner that proves only the running
+			// dimension must stay distinguishable from one that proves none.
+			name: "partially recorded: the blanks are kept, they say something",
+			ev:   Evidence{Proves: [3]string{"yes", "", ""}},
+			want: `{"proves":["yes","",""]}`,
+		},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			got, err := json.Marshal(c.ev)
+			if err != nil {
+				t.Fatalf("marshal: %v", err)
+			}
+			if string(got) != c.want {
+				t.Errorf("got  %s\nwant %s", got, c.want)
+			}
+		})
+	}
+}
+
+// TestEvidenceRoundTripsThroughItsOwnMarshaller guards the alias trick: a MarshalJSON
+// that forgot to shed the method set would recurse until the stack gives out, and a
+// misnamed embedded field would silently drop every other field of Evidence.
+func TestEvidenceRoundTripsThroughItsOwnMarshaller(t *testing.T) {
+	in := Evidence{
+		Attribute: "bucket ACL", Observed: "public-read", Expected: "private",
+		Source: "api:GetBucketAcl", Type: "inventory-state",
+	}
+	raw, err := json.Marshal(in)
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	var out Evidence
+	if err := json.Unmarshal(raw, &out); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if out != in {
+		t.Errorf("round trip lost data:\n got %+v\nwant %+v", out, in)
 	}
 }

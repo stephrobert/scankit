@@ -15,6 +15,7 @@
 package assessment
 
 import (
+	"encoding/json"
 	"fmt"
 	"sort"
 	"strings"
@@ -58,6 +59,36 @@ type Evidence struct {
 	Source    string    `json:"source,omitempty"`    // provenance of the value, e.g. "api:GetBucketAcl", "terraform:planned_values", "command:sshd -T"
 	Type      string    `json:"type,omitempty"`      // evidence type: effective-runtime | persistent-config | inventory-state | filesystem-state | behavioral | manual
 	Proves    [3]string `json:"proves,omitempty"`    // what a pass proves: [running, persistent, reboot-survivable], each yes|unknown|na
+}
+
+// MarshalJSON omits `proves` when nothing was recorded in it.
+//
+// The `omitempty` tag above is, and always was, a no-op: encoding/json applies it to
+// nil slices and maps, zero numbers, empty strings, false and nil pointers — never to
+// a fixed-size array. A zero [3]string therefore serialised as ["","",""] on every
+// single result, in the JSON output, in sealed evidence bundles, and in anything built
+// on top of them.
+//
+// That is the one behaviour that MISLEADS. A consumer could not tell "no proof was
+// recorded" from "three proofs were recorded and all are blank", and the two mean
+// very different things for a tool whose contract is that a status is backed by what
+// was actually observed. An archived assessment carries those three blanks forever,
+// and a later reader has no way to interpret them.
+//
+// The array is kept rather than turned into a slice: its three positions ARE its
+// meaning (report.provesDimensions indexes them by name), and a scanner that fills
+// only the first would otherwise be indistinguishable from one that fills none.
+// Changing the type would also break every caller that writes Proves: [3]string{…}.
+func (e Evidence) MarshalJSON() ([]byte, error) {
+	// An alias sheds the method set, so this does not recurse.
+	type evidence Evidence
+	if e.Proves == [3]string{} {
+		return json.Marshal(struct {
+			evidence
+			Proves []string `json:"proves,omitempty"`
+		}{evidence: evidence(e)})
+	}
+	return json.Marshal(evidence(e))
 }
 
 // Waiver records an accepted risk with a written justification — distinct from NotApplicable
