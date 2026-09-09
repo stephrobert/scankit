@@ -6,6 +6,21 @@ All notable changes to scankit are documented here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- **A terminal block printed one control's title and remediation over another
+  control's findings.** Findings were grouped by `Code` alone, while a block prints a
+  code, a title and a remediation and then lists findings underneath — so it *asserts*
+  those three of every finding it gathers. As soon as two controls shared a code (a
+  normative requirement often covers several), the title and remediation were those of
+  the FIRST finding, and the others sat under a heading that does not describe them,
+  above a remediation that does not fix them. The remediation is the line a reader acts
+  on: measured on a real tenant, it told them to revoke a root key in order to fix a
+  `Resource="*"` grant. The grouping key is now exactly what the block asserts — code,
+  title and remediation — so findings that do not share all three do not share a block.
+  A single control under a code renders exactly as before, and the controls table stops
+  summing `Sev` and `#` across different controls on one row.
+
 ## [0.3.3] - 2026-09-09
 
 ### Added
