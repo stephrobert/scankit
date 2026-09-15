@@ -1,39 +1,74 @@
-# Dependabot keeps dependencies current — satisfies OpenSSF Scorecard's
-# Dependency-Update-Tool check and surfaces vulnerable transitive bumps early.
-# A cooldown quarantines freshly-published versions (the window in which a
-# supply-chain compromise is not yet detected) before a PR is opened.
+# Dependabot rules shared across the stephrobert repositories.
+#
+# This file is the SAME template in kubernetes-dsoxlab-training,
+# linux-dsoxlab-training, ansible-training, dsoxlab and scankit. Only the
+# package ecosystem changes with the language of the repository: `uv` for the
+# four Python repositories, `gomod` for scankit. A divergence is fixed by
+# realigning the repository on the template, not by adapting the template to
+# the repository.
+#
+# What the template fixes is the NUMBER of pull requests. Without a `groups`
+# block, Dependabot opens a branch, a PR and a full CI run PER DEPENDENCY.
+# Measured on 2026-09-15, the five repositories had five different
+# configurations: ansible-training, the only one whose package ecosystem had
+# no group, carried 6 open PRs, 5 of them for five packages of the same family
+# that ship on the same day and were never merged separately.
+#
+# It also satisfies Scorecard's Dependency-Update-Tool check, and surfaces
+# vulnerable transitive bumps early.
 version: 2
 updates:
-  - package-ecosystem: gomod
+  # --- Go modules ------------------------------------------------------
+  - package-ecosystem: "gomod"
     directory: "/"
     schedule:
-      interval: weekly
+      interval: "weekly"
     open-pull-requests-limit: 5
-    labels:
-      - dependencies
-      - go
     commit-message:
-      prefix: "build(deps)"
-    groups:
-      go-dependencies:
-        patterns: ["*"]
+      prefix: "chore(deps)"
+    # Wait before proposing a brand-new release: a compromised package is
+    # usually yanked within days, so a cooldown shrinks the window in which we
+    # would have pulled it.
+    #
+    # The semver tiers are supported for PACKAGE ecosystems: a major waits two
+    # weeks, a patch three days.
     cooldown:
       default-days: 7
       semver-major-days: 14
       semver-minor-days: 7
       semver-patch-days: 3
+    groups:
+      deps-minor-and-patch:
+        patterns: ["*"]
+        update-types: ["minor", "patch"]
 
-  - package-ecosystem: github-actions
+  # --- GitHub Actions -------------------------------------------------------
+  - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
-      interval: weekly
-    labels:
-      - dependencies
-      - github-actions
+      interval: "weekly"
+    open-pull-requests-limit: 5
     commit-message:
-      prefix: "ci(actions)"
-    groups:
-      actions:
-        patterns: ["*"]
+      prefix: "chore(ci)"
+    # `default-days` ONLY here: the semver-{major,minor,patch}-days cooldown
+    # tiers are NOT supported for the github-actions ecosystem. Declaring them
+    # fails validation on GitHub's side, which then stops opening PRs at all --
+    # and that looks exactly like "no update available". This project already
+    # learned it the hard way.
     cooldown:
       default-days: 7
+    # One batch a week rather than one branch per action. The three
+    # `github/codeql-action/*` actions always ship the same version on the same
+    # day, and used to open three PRs that were only ever merged together.
+    #
+    # Majors stay on their own: they are the ones that break, they deserve to
+    # be read, and grouping them would let one incompatible action block every
+    # other update in the batch.
+    #
+    # Security alerts stay out of the group, which is the default
+    # (`applies-to: version-updates`): they are urgent and deserve a targeted
+    # PR rather than waiting for the weekly batch.
+    groups:
+      actions-minor-and-patch:
+        patterns: ["*"]
+        update-types: ["minor", "patch"]
