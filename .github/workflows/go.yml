@@ -67,6 +67,14 @@ jobs:
             echo "These files are not gofmt-clean:"; echo "$unformatted"; exit 1
           fi
 
+      # The Go counterpart of `uv lock --check` in the sibling repositories: a
+      # go.mod/go.sum that has drifted from the imports still builds, while
+      # govulncheck and Dependabot keep reading a manifest that no longer
+      # describes what is pulled. `-diff` reports the difference and exits
+      # non-zero without writing anything, which is what CI wants.
+      - name: go.mod and go.sum still describe the imports
+        run: go mod tidy -diff
+
       - name: go vet
         run: go vet ./...
 
