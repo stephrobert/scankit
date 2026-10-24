@@ -38,7 +38,7 @@ jobs:
       id-token: write # OIDC to publish the score to score.getplumber.io
     steps:
       - name: Harden runner
-        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        uses: step-security/harden-runner@ccd8616d44fd3846e67624a50d5aad6d37bf2d25 # v2.22.1
         with:
           egress-policy: audit
       - name: Checkout
@@ -47,7 +47,7 @@ jobs:
           persist-credentials: false
 
       - name: Plumber compliance scan
-        uses: getplumber/plumber@6452d3d9c12dfa4aecaecde6bc6c528eea3b21a5 # v0.4.55
+        uses: getplumber/plumber@ccd274c2abc9f66d7e44051d612d49c8ed1747ac # v0.7.2
         with:
           # Strict gate from day one: any non-compliance fails the workflow.
           min-points: "100"
