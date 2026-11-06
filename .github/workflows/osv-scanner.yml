@@ -6,7 +6,7 @@ name: OSV-Scanner
 #
 # Why this no longer calls the google/osv-scanner-action reusable workflow: that workflow runs
 # inside a container image pinned to a Go older than this module's (v2.3.8 ships golang:1.26.2,
-# v2.5.1 ships 1.26.5; go.mod requires 1.26.6). With GOTOOLCHAIN=local, govulncheck cannot load
+# v2.5.1 ships 1.26.5; go.mod requires 1.26.10). With GOTOOLCHAIN=local, govulncheck cannot load
 # the module, so OSV silently loses reachability filtering and reports every advisory in the
 # dependency graph. That is what made the 2026-08-31 scheduled run red on GO-2026-6303 in
 # golang.org/x/crypto — a package scankit does not import — while govulncheck on the same tree
