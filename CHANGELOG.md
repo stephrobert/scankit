@@ -6,6 +6,13 @@ All notable changes to scankit are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.3.6] - 2026-11-06
+
+### Security
+
+- **Require Go 1.26.10** so CI and consumers use a toolchain with the standard-library security
+  fixes needed for the vulnerability workflows to pass.
+
 ## [0.3.5] - 2026-09-09
 
 ### Fixed
@@ -239,7 +246,8 @@ pitstop and pavois security scanners.
   (build/test/vet/govulncheck, CodeQL, OpenSSF Scorecard, dependency-review, Trivy,
   OSV-Scanner, TruffleHog, SBOM) and an SLSA-attested release workflow.
 
-[Unreleased]: https://github.com/stephrobert/scankit/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/stephrobert/scankit/compare/v0.3.6...HEAD
+[0.3.6]: https://github.com/stephrobert/scankit/releases/tag/v0.3.6
 [0.3.0]: https://github.com/stephrobert/scankit/releases/tag/v0.3.0
 [0.2.3]: https://github.com/stephrobert/scankit/releases/tag/v0.2.3
 [0.2.2]: https://github.com/stephrobert/scankit/releases/tag/v0.2.2
